@@ -98,3 +98,7 @@ Same principle throughout: do more, but never weaken the promise that nothing le
 Vite · TypeScript (no framework) · Web Worker · WASM codecs
 ([`@jsquash/png`](https://github.com/jamsinclair/jSquash), `@jsquash/jpeg`, `@jsquash/webp`) ·
 Playwright for end-to-end tests.
+
+## License
+
+[MIT](LICENSE) — free to use, modify, and distribute.
