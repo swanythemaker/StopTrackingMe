@@ -198,39 +198,92 @@ app.innerHTML = `
 
       <div class="roadmap">
         <p class="roadmap-eyebrow">Where this is going</p>
-        <h2>A local AI that hunts what allowlists can't</h2>
+        <h2>Erase every trace — not just the ones we can name yet</h2>
         <p class="roadmap-lead">
-          Allowlists catch the tracking we already know the shape of. The trackers worth fearing are
-          the hidden ones — engineered to survive a metadata strip. The long game: a small AI model
-          that runs <b>entirely inside your browser tab</b>. No server, no upload, no exception to the
-          "your pixels never leave" promise. It loads once, then reasons over your file the way a
-          paranoid human auditor would.
+          Today it removes the hidden data we already know how to find. But the traces worth fearing
+          are the ones built to survive a clean-up. The plan is to keep going — deeper into your
+          images, then out to everything else that quietly follows you around — without ever breaking
+          the one rule: <b>nothing leaves your device</b>.
         </p>
-        <ul class="roadmap-list" role="list">
-          <li>
-            <strong>Catch the unknown, not the cataloged.</strong>
-            Instead of "is this chunk on my allowlist?", it asks "could anything here identify,
-            locate, or follow the person who shared it?"
-          </li>
-          <li>
-            <strong>See the picture, not just the bytes.</strong>
-            Faces, license plates, a reflection in a window, a landmark, a screen with a name on it —
-            flag what the image itself gives away and offer to blur it.
-          </li>
-          <li>
-            <strong>Hunt the hidden and the secret.</strong>
-            Invisible watermarks, perceptual hashes, steganographic payloads, AI-generation
-            fingerprints — assume every file is hiding something and go looking.
-          </li>
-          <li>
-            <strong>Explain every call, on-device.</strong>
-            "Removed this because it could reveal that." Plain-language reasoning, generated locally,
-            never phoning home.
-          </li>
-        </ul>
+
+        <div class="roadmap-groups">
+          <section class="roadmap-group">
+            <h3>Go deeper on every image</h3>
+            <ul class="roadmap-list" role="list">
+              <li>
+                <strong>See the picture, not just the data.</strong>
+                Spot faces, license plates, a reflection in a window, a landmark, or a name on a
+                screen — and offer to blur them before you share.
+              </li>
+              <li>
+                <strong>Break what hides in the pixels.</strong>
+                A heavy-clean mode that disrupts invisible watermarks, hidden messages and tracking
+                fingerprints, with a risk score so you know how exposed a photo really is.
+              </li>
+              <li>
+                <strong>Check the work twice.</strong>
+                Rebuild the image through more than one engine and compare, so a single buggy
+                converter can never let something slip through.
+              </li>
+            </ul>
+          </section>
+
+          <section class="roadmap-group">
+            <h3>A private mind, in your tab</h3>
+            <ul class="roadmap-list" role="list">
+              <li>
+                <strong>Reads your file like a paranoid expert.</strong>
+                A small model that runs entirely on your device — no upload, no server — asking one
+                question: could anything in here point back to you?
+              </li>
+              <li>
+                <strong>Explains itself in plain words.</strong>
+                “Removed this, because it could reveal that.” Every decision spelled out, worked out
+                locally, never phoning home.
+              </li>
+            </ul>
+          </section>
+
+          <section class="roadmap-group">
+            <h3>Beyond photos</h3>
+            <ul class="roadmap-list" role="list">
+              <li>
+                <strong>Clean the links you share.</strong>
+                Strip the tracking tails off a URL and expand shortened redirects that sneak them
+                back in.
+              </li>
+              <li>
+                <strong>Show what's watching.</strong>
+                A read-out of what a page can use to fingerprint you, and the third-party calls it
+                makes behind your back.
+              </li>
+              <li>
+                <strong>Reset what follows you.</strong>
+                One click to wipe the cookies and stored IDs that quietly track you between visits.
+              </li>
+            </ul>
+          </section>
+
+          <section class="roadmap-group">
+            <h3>Trust you can verify</h3>
+            <ul class="roadmap-list" role="list">
+              <li>
+                <strong>Open and reproducible.</strong>
+                Signed releases you can rebuild yourself, so the app you run is provably the one we
+                published.
+              </li>
+              <li>
+                <strong>A receipt for every clean-up.</strong>
+                A local report — what went in, what came out, what was removed — that stays on your
+                machine.
+              </li>
+            </ul>
+          </section>
+        </div>
+
         <blockquote class="roadmap-quote">
-          The promise was never "we stripped the EXIF." It's that <b>nothing you share can be traced
-          back to you</b> — not the obvious tags, and not the hidden ones.
+          We're not done at “we removed the location tag.” The goal is simple — <b>nothing you share
+          can be traced back to you</b>, not the obvious traces, and not the hidden ones.
         </blockquote>
       </div>
     </section>
@@ -238,6 +291,7 @@ app.innerHTML = `
     <footer class="foot">
       <span>${ICON.lock}</span>
       <p>100% local. No servers, no accounts, no tracking. Your pixels never leave this tab.</p>
+      <span class="foot-version" title="build ${__APP_COMMIT__}">v${__APP_VERSION__}</span>
     </footer>
   </main>
 

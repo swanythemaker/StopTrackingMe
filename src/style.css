@@ -911,11 +911,24 @@ pre {
 .roadmap-lead b {
   color: #f6f3e9;
 }
-.roadmap-list {
+.roadmap-groups {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px 22px;
-  margin: 0 0 18px;
+  gap: clamp(16px, 2.6vw, 30px);
+  margin: 0 0 20px;
+}
+.roadmap-group h3 {
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.roadmap-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
@@ -972,6 +985,15 @@ pre {
 }
 .foot p {
   margin: 0;
+}
+.foot-version {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: #7d8c82;
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  white-space: nowrap;
 }
 
 /* ---------- drag overlay ---------- */
@@ -1034,7 +1056,7 @@ pre {
   .preview-grid,
   .scan-grid,
   .raw-cols,
-  .roadmap-list {
+  .roadmap-groups {
     grid-template-columns: 1fr;
   }
   .advanced {
