@@ -1,28 +1,48 @@
 /// <reference lib="webworker" />
 
-import { auditBytes, isSupportedImageType, type SupportedFormat } from "./audit";
+import init, {
+  decodeAndTransform,
+  stripAndAudit,
+  auditBytes,
+} from "../wasm/sanitize_core.js";
 import {
-  stripJpegAppMarkers,
-  stripPngToAllowlist,
-  stripWebpToAllowlist,
-} from "./normalize";
+  isSupportedImageType,
+  type AuditSummary,
+  type SupportedFormat,
+} from "./formats";
 import type {
+  AuditRequest,
+  SanitizeRequest,
   SanitizeStage,
   WorkerProgress,
   WorkerRequest,
   WorkerResponse,
 } from "./types";
-import { encode as encodeJpeg } from "@jsquash/jpeg";
-import { encode as encodePng } from "@jsquash/png";
-import { encode as encodeWebp } from "@jsquash/webp";
+// Import the encoder entry points directly (not the package index) so the jsquash *decoder* wasms
+// are never referenced — decode is now ours, in sanitize-core. Drops ~300 KB of dead codec wasm.
+import encodeJpeg from "@jsquash/jpeg/encode";
+import encodePng from "@jsquash/png/encode";
+import encodeWebp from "@jsquash/webp/encode";
 
+// Byte-size guardrail stays in TS at the worker boundary (cheap, pre-wasm). Dimension/pixel limits
+// live in the wasm `guard` module (they need the decoded header).
 const MAX_INPUT_BYTES = 64 * 1024 * 1024;
-const MAX_WIDTH = 16384;
-const MAX_HEIGHT = 16384;
-const MAX_PIXELS = 100_000_000;
+
+// The wasm module is loaded once, lazily, on the first job (keeps first-paint cost off the bundle).
+let wasmReady: Promise<unknown> | null = null;
+function ensureWasm(): Promise<unknown> {
+  if (!wasmReady) {
+    wasmReady = init();
+  }
+  return wasmReady;
+}
 
 self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
   const payload = event.data;
+  if (payload.kind === "audit") {
+    await handleAudit(payload);
+    return;
+  }
   try {
     const result = await sanitize(payload);
     self.postMessage(result, [result.outputBuffer]);
@@ -37,15 +57,38 @@ self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
   }
 });
 
+async function handleAudit(request: AuditRequest): Promise<void> {
+  try {
+    await ensureWasm();
+    const json = auditBytes(new Uint8Array(request.inputBuffer));
+    const audit = JSON.parse(json) as AuditSummary;
+    self.postMessage({ type: "audit-done", requestId: request.requestId, audit });
+  } catch {
+    // Input audit is purely informational; failure here must not break the UI.
+    const audit: AuditSummary = {
+      kind: "unknown",
+      issues: ["Could not scan this file."],
+      markers: [],
+      byteLength: request.inputBuffer.byteLength,
+      passed: false,
+    };
+    self.postMessage({ type: "audit-done", requestId: request.requestId, audit });
+  }
+}
+
 function report(requestId: number, stage: SanitizeStage, pct: number): void {
   const progress: WorkerProgress = { type: "progress", requestId, stage, pct };
   self.postMessage(progress);
 }
 
-async function sanitize(request: WorkerRequest): Promise<Extract<WorkerResponse, { ok: true }>> {
+async function sanitize(
+  request: SanitizeRequest,
+): Promise<Extract<WorkerResponse, { ok: true }>> {
   report(request.requestId, "read", 5);
   if (!isSupportedImageType(request.sourceType)) {
-    throw new Error(`Unsupported input type "${request.sourceType || "unknown"}". Use PNG, JPEG or WebP.`);
+    throw new Error(
+      `Unsupported input type "${request.sourceType || "unknown"}". Use PNG, JPEG or WebP.`,
+    );
   }
   if (request.inputBuffer.byteLength > MAX_INPUT_BYTES) {
     throw new Error(
@@ -54,71 +97,55 @@ async function sanitize(request: WorkerRequest): Promise<Extract<WorkerResponse,
   }
   const inputByteLength = request.inputBuffer.byteLength;
 
-  const outputType =
-    request.ultraParanoid
-      ? "image/png"
-      : request.outputType === "same"
-        ? request.sourceType
-        : request.outputType;
+  const outputType = request.ultraParanoid
+    ? "image/png"
+    : request.outputType === "same"
+      ? request.sourceType
+      : request.outputType;
   if (!isSupportedImageType(outputType)) {
     throw new Error(`Unsupported output type: ${outputType}`);
   }
 
+  await ensureWasm();
+
+  // 1. Decode + pixel transforms in our deterministic wasm (replaces native createImageBitmap).
   report(request.requestId, "decode", 25);
-  const sourceBlob = new Blob([request.inputBuffer], { type: request.sourceType });
-  let bitmap: ImageBitmap;
-  try {
-    bitmap = await createImageBitmap(sourceBlob);
-  } catch {
-    throw new Error("This file could not be decoded as an image. It may be corrupt or a disguised/unsupported format.");
-  }
-  if (bitmap.width > MAX_WIDTH || bitmap.height > MAX_HEIGHT) {
-    const w = bitmap.width;
-    const h = bitmap.height;
-    bitmap.close();
-    throw new Error(`Image is ${w}×${h}px — over the ${MAX_WIDTH}×${MAX_HEIGHT}px limit.`);
-  }
-  if (bitmap.width * bitmap.height > MAX_PIXELS) {
-    const mp = (bitmap.width * bitmap.height) / 1_000_000;
-    bitmap.close();
-    throw new Error(`Image is ${mp.toFixed(1)} MP — over the ${(MAX_PIXELS / 1_000_000).toFixed(0)} MP limit.`);
-  }
-  const width = bitmap.width;
-  const height = bitmap.height;
+  const opts = JSON.stringify({
+    resizePct: clampPct(request.resizePct),
+    rotate: request.rotate ?? 0,
+    flipH: Boolean(request.flipH),
+    flipV: Boolean(request.flipV),
+  });
+  const decoded = decodeAndTransform(new Uint8Array(request.inputBuffer), opts);
+  const width = decoded.width;
+  const height = decoded.height;
+  const origWidth = decoded.origWidth;
+  const origHeight = decoded.origHeight;
+  const rgba = decoded.takeRgba();
+  const imageData = new ImageData(new Uint8ClampedArray(rgba), width, height);
 
-  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-  const ctx = canvas.getContext("2d", { alpha: true });
-  if (!ctx) {
-    throw new Error("Failed to initialize worker canvas");
-  }
-  ctx.drawImage(bitmap, 0, 0);
-  bitmap.close();
-
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
+  // 2. Re-encode a fresh file via the @jsquash encoders (unchanged trust boundary).
   report(request.requestId, "encode", 55);
-  let outputBuffer = await encodeWithWasm(
+  const encoded = await encodeWithWasm(
     outputType,
     imageData,
     clampQuality(outputType, request.quality),
   );
 
+  // 3. Strip-to-allowlist + 4. fail-closed audit, both in wasm off one allowlist.
   report(request.requestId, "strip", 80);
-  if (outputType === "image/jpeg") {
-    outputBuffer = toArrayBuffer(stripJpegAppMarkers(new Uint8Array(outputBuffer)));
-  } else if (outputType === "image/png") {
-    outputBuffer = toArrayBuffer(stripPngToAllowlist(new Uint8Array(outputBuffer)));
-  } else if (outputType === "image/webp") {
-    outputBuffer = toArrayBuffer(stripWebpToAllowlist(new Uint8Array(outputBuffer)));
-  }
+  const result = stripAndAudit(new Uint8Array(encoded), outputType);
 
   report(request.requestId, "audit", 95);
-  const outputAudit = auditBytes(outputType, outputBuffer);
-  if (!outputAudit.passed) {
+  const outputAudit = JSON.parse(result.auditJson) as AuditSummary;
+  if (!result.passed) {
     throw new Error(
       `Fail-closed audit rejection: ${outputAudit.issues.join("; ") || "unknown issue"}`,
     );
   }
+
+  const outBytes = result.takeBytes();
+  const outputBuffer = outBytes.slice().buffer;
 
   return {
     type: "done",
@@ -130,7 +157,14 @@ async function sanitize(request: WorkerRequest): Promise<Extract<WorkerResponse,
     inputByteLength,
     width,
     height,
+    origWidth,
+    origHeight,
   };
+}
+
+function clampPct(pct: number | undefined): number {
+  if (!Number.isFinite(pct)) return 100;
+  return Math.min(100, Math.max(10, Math.round(pct as number)));
 }
 
 function clampQuality(type: string, quality: number): number | undefined {
@@ -156,10 +190,6 @@ async function encodeWithWasm(
   return encodeWebp(imageData, {
     quality: Math.round((quality ?? 0.92) * 100),
   });
-}
-
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.slice().buffer;
 }
 
 function mb(bytes: number): string {

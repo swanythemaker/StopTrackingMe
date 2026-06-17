@@ -1,6 +1,7 @@
-import type { AuditSummary, SupportedFormat } from "./audit";
+import type { AuditSummary, SupportedFormat } from "./formats";
 
-export type WorkerRequest = {
+export type SanitizeRequest = {
+  kind: "sanitize";
   requestId: number;
   sourceName: string;
   sourceType: string;
@@ -8,14 +9,24 @@ export type WorkerRequest = {
   outputType: SupportedFormat | "same";
   quality: number;
   ultraParanoid: boolean;
+  // Edit tools (defaults are identity: 100% / no rotation / no flip).
+  resizePct: number; // 10..100
+  rotate: number; // 0 | 90 | 180 | 270 (clockwise)
+  flipH: boolean;
+  flipV: boolean;
 };
 
-export type SanitizeStage =
-  | "read"
-  | "decode"
-  | "encode"
-  | "strip"
-  | "audit";
+// Informational input scan — auditing the original via the same wasm audit the output uses.
+export type AuditRequest = {
+  kind: "audit";
+  requestId: number;
+  sourceType: string;
+  inputBuffer: ArrayBuffer;
+};
+
+export type WorkerRequest = SanitizeRequest | AuditRequest;
+
+export type SanitizeStage = "read" | "decode" | "encode" | "strip" | "audit";
 
 export type WorkerProgress = {
   type: "progress";
@@ -32,8 +43,10 @@ export type WorkerSuccess = {
   outputAudit: AuditSummary;
   outputBuffer: ArrayBuffer;
   inputByteLength: number;
-  width: number;
-  height: number;
+  width: number; // output width (after transforms)
+  height: number; // output height (after transforms)
+  origWidth: number; // decoded upright width, before user transforms
+  origHeight: number;
 };
 
 export type WorkerFailure = {
@@ -43,5 +56,11 @@ export type WorkerFailure = {
   error: string;
 };
 
-export type WorkerResponse = WorkerSuccess | WorkerFailure;
+export type AuditDone = {
+  type: "audit-done";
+  requestId: number;
+  audit: AuditSummary;
+};
+
+export type WorkerResponse = WorkerSuccess | WorkerFailure | AuditDone;
 export type WorkerMessage = WorkerProgress | WorkerResponse;

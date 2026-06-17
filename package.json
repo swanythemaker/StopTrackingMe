@@ -1,11 +1,12 @@
 {
   "name": "stoptrackingme",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:wasm": "wasm-pack build sanitize-core --target web --out-dir ../src/wasm --out-name sanitize_core && rm -f src/wasm/.gitignore src/wasm/package.json",
     "preview": "vite preview",
     "test:e2e": "playwright test"
   },

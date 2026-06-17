@@ -1,11 +1,10 @@
 import "./style.css";
 import {
-  auditBytes,
   describeAudit,
   isSupportedImageType,
   type AuditSummary,
   type SupportedFormat,
-} from "./sanitizer/audit";
+} from "./sanitizer/formats";
 import type {
   SanitizeStage,
   WorkerMessage,
@@ -25,6 +24,10 @@ const ICON = {
   alert: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v5"/><path d="M12 16.5h.01"/><path d="M10.3 3.9 2.4 18a1.9 1.9 0 0 0 1.7 2.9h15.8a1.9 1.9 0 0 0 1.7-2.9L13.7 3.9a1.9 1.9 0 0 0-3.4 0Z"/></svg>`,
   lock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="10" rx="2.2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.2" r="1.3"/></svg>`,
   download: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 19h14"/></svg>`,
+  rotateCw: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v4h-4"/></svg>`,
+  rotateCcw: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/></svg>`,
+  flipH: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16" stroke-dasharray="2 2.4"/><path d="M8 9 4.5 12 8 15"/><path d="m16 9 3.5 3-3.5 3"/></svg>`,
+  flipV: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16" stroke-dasharray="2 2.4"/><path d="M9 8 12 4.5 15 8"/><path d="m9 16 3 3.5 3-3.5"/></svg>`,
 };
 
 app.innerHTML = `
@@ -94,6 +97,42 @@ app.innerHTML = `
               <input id="quality" type="range" min="60" max="100" value="92" />
             </label>
           </div>
+
+          <details class="adjust" id="adjustGroup">
+            <summary class="adjust-summary">
+              <span class="adjust-title">Adjust <small>resize · rotate · flip</small></span>
+              <span class="adjust-state" id="adjustState">Original</span>
+            </summary>
+            <div class="adjust-body">
+              <div class="adjust-field">
+                <span class="field-label">Resize</span>
+                <div class="seg-row" id="resizeChips" role="group" aria-label="Resize">
+                  <button type="button" class="seg is-active" data-pct="100">100%</button>
+                  <button type="button" class="seg" data-pct="75">75%</button>
+                  <button type="button" class="seg" data-pct="50">50%</button>
+                  <button type="button" class="seg" data-pct="25">25%</button>
+                  <button type="button" class="seg" id="resizeCustomToggle">Custom</button>
+                </div>
+                <div class="resize-custom" id="resizeCustom" hidden>
+                  <input id="resizeSlider" type="range" min="10" max="100" value="100"
+                         aria-label="Resize percentage" />
+                  <b id="resizeSliderValue">100%</b>
+                </div>
+                <p class="dim-readout" id="dimReadout" hidden></p>
+              </div>
+
+              <div class="adjust-field">
+                <span class="field-label">Rotate &amp; flip</span>
+                <div class="seg-row" role="group" aria-label="Rotate and flip">
+                  <button type="button" class="seg icon-seg" id="rotateLeft" title="Rotate left 90°" aria-label="Rotate left">${ICON.rotateCcw}</button>
+                  <button type="button" class="seg icon-seg" id="rotateRight" title="Rotate right 90°" aria-label="Rotate right">${ICON.rotateCw}</button>
+                  <button type="button" class="seg icon-seg" id="flipH" title="Flip horizontal" aria-label="Flip horizontal">${ICON.flipH}</button>
+                  <button type="button" class="seg icon-seg" id="flipV" title="Flip vertical" aria-label="Flip vertical">${ICON.flipV}</button>
+                </div>
+                <p class="adjust-note">Applied to the clean output, before re-encode. Resampling also disrupts pixel-hidden traces — it reduces, not removes.</p>
+              </div>
+            </div>
+          </details>
         </div>
 
         <button id="sanitizeBtn" class="primary" type="button" disabled>
@@ -339,6 +378,17 @@ const progress = must<HTMLElement>("#progress");
 const progressFill = must<HTMLElement>("#progressFill");
 const progressStage = must<HTMLElement>("#progressStage");
 const dragOverlay = must<HTMLElement>("#dragOverlay");
+const adjustState = must<HTMLElement>("#adjustState");
+const resizeChips = must<HTMLElement>("#resizeChips");
+const resizeCustomToggle = must<HTMLButtonElement>("#resizeCustomToggle");
+const resizeCustom = must<HTMLElement>("#resizeCustom");
+const resizeSlider = must<HTMLInputElement>("#resizeSlider");
+const resizeSliderValue = must<HTMLElement>("#resizeSliderValue");
+const dimReadout = must<HTMLElement>("#dimReadout");
+const rotateLeft = must<HTMLButtonElement>("#rotateLeft");
+const rotateRight = must<HTMLButtonElement>("#rotateRight");
+const flipHBtn = must<HTMLButtonElement>("#flipH");
+const flipVBtn = must<HTMLButtonElement>("#flipV");
 
 const STAGE_TEXT: Record<SanitizeStage, string> = {
   read: "Reading image…",
@@ -350,17 +400,127 @@ const STAGE_TEXT: Record<SanitizeStage, string> = {
 
 let selectedFile: File | null = null;
 let pendingRequestId = 0;
+let auditRequestId = 0;
 let busy = false;
 let downloadUrl: string | null = null;
 let inputPreviewUrl: string | null = null;
 let outputPreviewUrl: string | null = null;
 let dragDepth = 0;
 
+// Adjust (edit tools) state — defaults are identity, so the one-drop-clean path is unchanged.
+let resizePct = 100;
+let customResize = false;
+let rotateDeg = 0;
+let flipHState = false;
+let flipVState = false;
+let loadedDims: { w: number; h: number } | null = null;
+
 syncUltraParanoidUi();
 ultraParanoid.addEventListener("change", syncUltraParanoidUi);
 quality.addEventListener("input", () => {
   qualityValue.textContent = quality.value;
 });
+
+// --- Adjust controls (resize / rotate / flip) ---
+const resizeSegs = Array.from(
+  resizeChips.querySelectorAll<HTMLButtonElement>("button[data-pct]"),
+);
+
+for (const seg of resizeSegs) {
+  seg.addEventListener("click", () => {
+    customResize = false;
+    resizeCustom.hidden = true;
+    setResizePct(Number(seg.dataset.pct));
+  });
+}
+resizeCustomToggle.addEventListener("click", () => {
+  customResize = true;
+  resizeCustom.hidden = false;
+  setResizePct(Number(resizeSlider.value), true);
+});
+resizeSlider.addEventListener("input", () => {
+  customResize = true;
+  setResizePct(Number(resizeSlider.value), true);
+});
+rotateLeft.addEventListener("click", () => {
+  rotateDeg = (rotateDeg + 270) % 360;
+  syncRotateFlipUi();
+  updateAdjust();
+});
+rotateRight.addEventListener("click", () => {
+  rotateDeg = (rotateDeg + 90) % 360;
+  syncRotateFlipUi();
+  updateAdjust();
+});
+flipHBtn.addEventListener("click", () => {
+  flipHState = !flipHState;
+  syncRotateFlipUi();
+  updateAdjust();
+});
+flipVBtn.addEventListener("click", () => {
+  flipVState = !flipVState;
+  syncRotateFlipUi();
+  updateAdjust();
+});
+
+function setResizePct(pct: number, fromSlider = false): void {
+  resizePct = Math.min(100, Math.max(10, Math.round(pct || 100)));
+  for (const seg of resizeSegs) {
+    seg.classList.toggle(
+      "is-active",
+      !customResize && Number(seg.dataset.pct) === resizePct,
+    );
+  }
+  resizeCustomToggle.classList.toggle("is-active", customResize);
+  if (!fromSlider) {
+    resizeSlider.value = String(resizePct);
+  }
+  resizeSliderValue.textContent = `${resizePct}%`;
+  updateAdjust();
+}
+
+function syncRotateFlipUi(): void {
+  rotateLeft.classList.toggle("is-active", rotateDeg !== 0);
+  rotateRight.classList.toggle("is-active", rotateDeg !== 0);
+  flipHBtn.classList.toggle("is-active", flipHState);
+  flipVBtn.classList.toggle("is-active", flipVState);
+}
+
+function isIdentityAdjust(): boolean {
+  return resizePct === 100 && rotateDeg === 0 && !flipHState && !flipVState;
+}
+
+function updateAdjust(): void {
+  const parts: string[] = [];
+  if (resizePct !== 100) parts.push(`${resizePct}%`);
+  if (rotateDeg !== 0) parts.push(`↻${rotateDeg}°`);
+  if (flipHState) parts.push("↔");
+  if (flipVState) parts.push("↕");
+  adjustState.textContent = parts.length ? parts.join(" · ") : "Original";
+  adjustState.classList.toggle("is-on", parts.length > 0);
+  updateDimReadout();
+}
+
+function outputDims(): { w: number; h: number } | null {
+  if (!loadedDims) return null;
+  let w = loadedDims.w;
+  let h = loadedDims.h;
+  if (rotateDeg === 90 || rotateDeg === 270) [w, h] = [h, w];
+  w = Math.max(1, Math.round((w * resizePct) / 100));
+  h = Math.max(1, Math.round((h * resizePct) / 100));
+  return { w, h };
+}
+
+function updateDimReadout(): void {
+  const out = outputDims();
+  if (!loadedDims || !out || isIdentityAdjust()) {
+    dimReadout.hidden = true;
+    dimReadout.textContent = "";
+    return;
+  }
+  dimReadout.hidden = false;
+  dimReadout.textContent = `${loadedDims.w}×${loadedDims.h} → ${out.w}×${out.h}`;
+}
 
 dropzone.addEventListener("click", () => fileInput.click());
 dropzone.addEventListener("keydown", (event) => {
@@ -424,6 +584,7 @@ sanitizeBtn.addEventListener("click", async () => {
   const inputBuffer = await selectedFile.arrayBuffer();
   const requestId = ++pendingRequestId;
   const request: WorkerRequest = {
+    kind: "sanitize",
     requestId,
     sourceName: selectedFile.name,
     sourceType: selectedFile.type,
@@ -434,6 +595,10 @@ sanitizeBtn.addEventListener("click", async () => {
         : (outputFormat.value as SupportedFormat),
     quality: Number(quality.value) / 100,
     ultraParanoid: ultraParanoid.checked,
+    resizePct,
+    rotate: rotateDeg,
+    flipH: flipHState,
+    flipV: flipVState,
   };
 
   worker.postMessage(request, [inputBuffer]);
@@ -441,6 +606,19 @@ sanitizeBtn.addEventListener("click", async () => {
 
 worker.addEventListener("message", (event: MessageEvent<WorkerMessage>) => {
   const payload = event.data;
+
+  if (payload.type === "audit-done") {
+    if (payload.requestId !== auditRequestId) return;
+    inputReport.textContent = describeAudit(payload.audit);
+    renderScanCard(inputScanCard, payload.audit, "Input scan");
+    if (payload.audit.passed) {
+      setStatus("Looks clean already — sanitize to get a freshly re-encoded copy.", "good");
+    } else {
+      setStatus("Metadata detected. Ready to sanitize.", "muted");
+    }
+    return;
+  }
+
   if (payload.requestId !== pendingRequestId) {
     return;
   }
@@ -482,6 +660,8 @@ worker.addEventListener("message", (event: MessageEvent<WorkerMessage>) => {
     outBytes,
     width: payload.width,
     height: payload.height,
+    origWidth: payload.origWidth,
+    origHeight: payload.origHeight,
   });
   setStatus("Done. Output passed the strict fail-closed audit.", "good");
 
@@ -516,6 +696,8 @@ async function handleFileSelection(file: File | null): Promise<void> {
     fileCard.hidden = true;
     results.hidden = true;
     resultsEmpty.hidden = false;
+    loadedDims = null;
+    updateDimReadout();
     return;
   }
 
@@ -531,7 +713,6 @@ async function handleFileSelection(file: File | null): Promise<void> {
   }
 
   const inputBytes = await file.arrayBuffer();
-  const inputAudit = auditBytes(file.type, inputBytes);
   const previewUrl = URL.createObjectURL(new Blob([inputBytes], { type: file.type }));
 
   selectedFile = file;
@@ -546,7 +727,8 @@ async function handleFileSelection(file: File | null): Promise<void> {
   origSize.textContent = formatBytes(inputBytes.byteLength);
   fileCard.hidden = false;
 
-  // dimensions for the file facts line
+  // dimensions for the file facts line + the resize readout
+  loadedDims = null;
   loadDimensions(previewUrl).then((dim) => {
     const facts = [
       shortType(file.type),
@@ -554,22 +736,34 @@ async function handleFileSelection(file: File | null): Promise<void> {
       formatBytes(file.size),
     ].filter(Boolean);
     fileFacts.textContent = facts.join("  ·  ");
+    loadedDims = dim;
+    updateDimReadout();
   });
 
-  inputReport.textContent = describeAudit(inputAudit);
-  renderScanCard(inputScanCard, inputAudit, "Input scan");
-
-  if (inputAudit.passed) {
-    setStatus("Looks clean already — sanitize to get a freshly re-encoded copy.", "good");
-  } else {
-    setStatus("Metadata detected. Ready to sanitize.", "muted");
-  }
+  // Input scan runs through the same wasm audit the output gate uses.
+  inputReport.textContent = "Scanning…";
+  inputScanCard.innerHTML = "";
+  setStatus("Scanning metadata…", "muted");
+  const auditId = ++auditRequestId;
+  worker.postMessage({
+    kind: "audit",
+    requestId: auditId,
+    sourceType: file.type,
+    inputBuffer: inputBytes,
+  });
 }
 
 function renderVerdict(
   ok: boolean,
   error: string,
-  stats?: { inBytes: number; outBytes: number; width: number; height: number },
+  stats?: {
+    inBytes: number;
+    outBytes: number;
+    width: number;
+    height: number;
+    origWidth: number;
+    origHeight: number;
+  },
   titleOverride?: string,
 ): void {
   verdict.hidden = false;
@@ -593,8 +787,13 @@ function renderVerdict(
       ? Math.round(((stats.outBytes - stats.inBytes) / stats.inBytes) * 100)
       : 0;
     const sign = delta > 0 ? "+" : "";
+    const resized =
+      stats.origWidth !== stats.width || stats.origHeight !== stats.height;
+    const dims = resized
+      ? `${stats.origWidth}×${stats.origHeight} → ${stats.width}×${stats.height}`
+      : `${stats.width}×${stats.height}`;
     sub.textContent =
-      `Metadata removed and output re-verified. ${stats.width}×${stats.height} · ` +
+      `Metadata removed and output re-verified. ${dims} · ` +
       `${formatBytes(stats.inBytes)} → ${formatBytes(stats.outBytes)} (${sign}${delta}%).`;
   } else {
     sub.textContent = error || "The output did not pass the strict audit, so download was blocked.";

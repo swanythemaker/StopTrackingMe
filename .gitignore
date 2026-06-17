@@ -5,6 +5,9 @@ node_modules/
 dist/
 dist-ssr/
 
+# Rust crate build output (the generated wasm in src/wasm/ IS committed)
+sanitize-core/target/
+
 # Logs
 logs/
 *.log
@@ -27,6 +30,7 @@ screenshots/
 
 # Internal / working notes — never published
 STATUS.md
+updatev*.md
 .claude/
 *.tmp.*
 scripts/_tmp*

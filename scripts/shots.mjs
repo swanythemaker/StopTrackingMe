@@ -57,6 +57,13 @@ async function runFlow(page, label, full = true) {
   });
   await page.screenshot({ path: `${OUT}/${label}-loaded.png`, fullPage: full });
 
+  // Open the Adjust panel and pick a resize preset — captures the new edit tools, and makes the
+  // result a resized (and cleaned) image so the verdict shows the origW×H → outW×H story.
+  await page.click("#adjustGroup > summary");
+  await page.click('#resizeChips button[data-pct="75"]');
+  await page.waitForSelector("#dimReadout:not([hidden])");
+  await page.screenshot({ path: `${OUT}/${label}-adjust.png`, fullPage: full });
+
   // Kick off sanitize and try to catch the loading state.
   await page.click("#sanitizeBtn");
   try {

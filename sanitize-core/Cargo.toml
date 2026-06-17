@@ -1,0 +1,32 @@
+[package]
+name = "sanitize-core"
+version = "0.2.0"
+edition = "2021"
+description = "Deterministic, fuzzable image decode + pixel transforms + container strip/audit for STOPTRACKINGME. Compiles to WASM; one allowlist shared by strip and audit."
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# `image` for decode + imageops (resize/rotate/flip). default-features=false drops rayon/threads
+# (no COEP needed). The format features also pull encoders, but we never call them; LTO + strip
+# drop the dead encoder code from the release wasm. Encode stays in @jsquash on the JS side.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+kamadak-exif = "0.6"
+wasm-bindgen = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+# The wasm-opt bundled with wasm-pack is old and validates without the wasm features modern rustc
+# emits by default; enable them explicitly so optimization still runs (and we keep the size win).
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ['-Os', '--enable-bulk-memory', '--enable-nontrapping-float-to-int', '--enable-sign-ext', '--enable-mutable-globals']

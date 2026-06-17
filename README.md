@@ -21,6 +21,9 @@ blocked — you never get a file that wasn't verified.
 - **No network.** The production build ships a Content-Security-Policy that blocks every
   outbound connection.
 - **Fail-closed.** Output is released only after it passes a strict audit.
+- **Deterministic.** Decode, pixel edits, stripping and audit run inside a single audited
+  WebAssembly core, so the cleaned output is byte-for-byte identical in every browser — and the
+  strip and audit read one shared allowlist, so they can never disagree.
 - **Honest about limits.** It tells you exactly what it removed — and what it can't.
 
 ![Verified-clean result](docs/result.png)
@@ -28,10 +31,11 @@ blocked — you never get a file that wasn't verified.
 ## How it works
 
 1. Drop or pick a PNG, JPEG, or WebP.
-2. The image is decoded to raw pixels — no original bytes survive.
-3. A fresh file is re-encoded through audited WASM codecs.
-4. Format-specific stripping removes every non-essential chunk and marker.
-5. The output is re-scanned. If it isn't provably clean, download is refused.
+2. Our own WebAssembly core decodes it to raw pixels — not the browser's native decoder — so the
+   result is the same everywhere, with EXIF orientation baked in before the tag is dropped.
+3. Any edits you chose (resize, rotate, flip) are applied to those pixels.
+4. A fresh file is re-encoded, then the same core strips every non-essential chunk and marker.
+5. The output is re-scanned by the same parser. If it isn't provably clean, download is refused.
 6. You download a verified-clean copy.
 
 The input scan reporting **FAIL** is normal — it's flagging the metadata in your *original*.
@@ -54,6 +58,17 @@ Forces PNG output, disables lossy controls, and applies the strictest checks. PN
 container with fewer metadata edge-cases, so the fail-closed audit can be more certain. PNG is
 lossless, so the cleaned file is sometimes *larger* than the original — that's expected.
 
+## Resize, rotate, flip — into the clean copy
+
+An optional **Adjust** panel lets you downscale (75 / 50 / 25 %, or a custom percentage), rotate
+90°, or flip. Edits are applied to the decoded pixels *before* re-encode, so the edited image still
+passes the exact same strip + audit — the cleaned file is the edited one, in a single step. The
+resampling is done in WebAssembly (not the browser's canvas), so it's reproducible.
+
+Downscaling resamples every pixel, which also disrupts pixel-domain steganography and shifts
+perceptual hashes — it *reduces* what can survive, but it is **not** a steganography guarantee.
+Defaults are identity (100 %, no rotation), so the one-drop-clean path is unchanged.
+
 ## What it can't do
 
 This is metadata and provenance removal, not magic. It **cannot** guarantee removal of:
@@ -74,18 +89,21 @@ npm run dev      # http://localhost:8888
 ## Build & test
 
 ```bash
-npm run build      # type-check + production bundle
-npm run test:e2e   # asserts the sanitize flow makes zero external requests
+npm run build       # type-check + production bundle
+npm run build:wasm  # rebuild the Rust sanitize-core wasm (needs Rust + wasm-pack; output is committed)
+npm run test:e2e    # zero-network + cross-engine determinism + the edit tools
+cargo test --manifest-path sanitize-core/Cargo.toml   # the core's own contract tests
 ```
 
-The e2e test is the core contract: it watches every network request during a real sanitize
-and fails if a single byte tries to leave the page.
+Two contracts back the promise: the e2e test watches every network request during a real sanitize
+and fails if a single byte tries to leave the page; the core's tests prove that stripped output
+always passes the audit, and that malformed input fails closed without crashing.
 
 ## Roadmap
 
-- **Resize-before-sanitize** for images over the size cap, instead of rejecting them.
 - **Stego-risk-reduction mode** — aggressive downscale, requantization, and stricter
   re-encode profiles to disrupt hidden payloads (reduces survivability; never a guarantee).
+- **Crop** — cut an edge that's leaking a sign, a timestamp, or a bystander.
 - **Multi-codec verification** — encode/decode through independent engines and fail on
   pixel-hash mismatches.
 - **Batch / multi-file** processing under the same fail-closed rules.
@@ -95,7 +113,8 @@ Same principle throughout: do more, but never weaken the promise that nothing le
 
 ## Tech
 
-Vite · TypeScript (no framework) · Web Worker · WASM codecs
+Vite · TypeScript (no framework) · Web Worker · a **Rust → WebAssembly** sanitize core
+(decode, pixel transforms, container strip + audit) · WASM encoders
 ([`@jsquash/png`](https://github.com/jamsinclair/jSquash), `@jsquash/jpeg`, `@jsquash/webp`) ·
 Playwright for end-to-end tests.
 
