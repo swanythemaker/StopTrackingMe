@@ -25,8 +25,21 @@ async function makeImage(page: Page, mime: string, w = 48, h = 32): Promise<Buff
   return Buffer.from(arr);
 }
 
-// The Ultra Paranoid checkbox is visually replaced by a switch (hidden input), so toggle it in the
-// DOM and fire `change` rather than clicking the invisible element.
+// Dropping a file auto-runs the input scan + first sanitize (the carousel transition), then lands
+// on the result slide. No Sanitize button — the upload itself drives the flow.
+async function uploadAndClean(page: Page, name: string, mime: string, buffer: Buffer) {
+  await page.setInputFiles("#fileInput", { name, mimeType: mime, buffer });
+  await expect(page.locator("#downloadArea a")).toBeVisible({ timeout: 25000 });
+  await expect(page.locator(".verdict.ok")).toBeVisible();
+}
+
+// Adjust controls (resize/rotate/flip, format, quality) live in the inline mini-editor on step 2.
+async function enterEdit(page: Page) {
+  await page.locator("#editBtn").click();
+  await expect(page.locator("#editor")).toBeVisible();
+}
+
+// The Ultra Paranoid checkbox is a styled switch (hidden input), so toggle it in the DOM.
 async function setUltra(page: Page, on: boolean) {
   await page.evaluate((want) => {
     const cb = document.querySelector<HTMLInputElement>("#ultraParanoid")!;
@@ -35,17 +48,6 @@ async function setUltra(page: Page, on: boolean) {
       cb.dispatchEvent(new Event("change", { bubbles: true }));
     }
   }, on);
-}
-
-async function loadFile(page: Page, name: string, mime: string, buffer: Buffer) {
-  await page.setInputFiles("#fileInput", { name, mimeType: mime, buffer });
-  await expect(page.locator("#sanitizeBtn")).toBeEnabled({ timeout: 15000 });
-}
-
-async function sanitizeAndWait(page: Page) {
-  await page.getByRole("button", { name: "Sanitize" }).click();
-  await expect(page.locator("#downloadArea a")).toBeVisible({ timeout: 20000 });
-  await expect(page.locator(".verdict.ok")).toBeVisible();
 }
 
 async function outputDims(page: Page): Promise<{ w: number; h: number }> {
@@ -63,17 +65,23 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/");
 });
 
-for (const { mime, ext } of [
-  { mime: "image/png", ext: "png" },
-  { mime: "image/jpeg", ext: "jpg" },
-  { mime: "image/webp", ext: "webp" },
+for (const { mime, ext, kind } of [
+  { mime: "image/png", ext: "png", kind: "png" },
+  { mime: "image/jpeg", ext: "jpg", kind: "jpeg" },
+  { mime: "image/webp", ext: "webp", kind: "webp" },
 ]) {
   test(`sanitize ${mime} produces a clean downloadable output`, async ({ page }) => {
-    // Turn off Ultra Paranoid (which forces PNG) so each format round-trips itself.
-    await setUltra(page, false);
     const buf = await makeImage(page, mime);
-    await loadFile(page, `in.${ext}`, mime, buf);
-    await sanitizeAndWait(page);
+    await uploadAndClean(page, `in.${ext}`, mime, buf);
+
+    // Re-encode to this format (turn off Ultra Paranoid, which forces PNG) via the mini-editor.
+    await enterEdit(page);
+    await setUltra(page, false);
+    await page.locator("#outputFormat").selectOption(mime);
+    // The output scan report names the container kind once the inline re-clean completes.
+    await expect(page.locator("#outputReport")).toContainText(`kind: ${kind}`, {
+      timeout: 25000,
+    });
 
     const report = await page.locator("#outputReport").textContent();
     expect(report).toContain("status: PASS");
@@ -84,11 +92,14 @@ for (const { mime, ext } of [
 
 test("resize 50% halves the output dimensions", async ({ page }) => {
   const buf = await makeImage(page, "image/png");
-  await loadFile(page, "in.png", "image/png", buf);
-  await page.locator("#adjustGroup > summary").click(); // open Adjust
+  await uploadAndClean(page, "in.png", "image/png", buf);
+  await enterEdit(page);
   await page.locator('#resizeChips button[data-pct="50"]').click();
   await expect(page.locator("#dimReadout")).toContainText("48×32 → 24×16");
-  await sanitizeAndWait(page);
+  await page.waitForFunction(() => {
+    const i = document.querySelector<HTMLImageElement>("#outputPreview");
+    return !!i && i.naturalWidth === 24 && i.naturalHeight === 16;
+  }, null, { timeout: 25000 });
 
   const dims = await outputDims(page);
   expect(dims).toEqual({ w: 24, h: 16 });
@@ -97,10 +108,13 @@ test("resize 50% halves the output dimensions", async ({ page }) => {
 
 test("rotate 90° swaps the output dimensions", async ({ page }) => {
   const buf = await makeImage(page, "image/png", 48, 32);
-  await loadFile(page, "in.png", "image/png", buf);
-  await page.locator("#adjustGroup > summary").click();
+  await uploadAndClean(page, "in.png", "image/png", buf);
+  await enterEdit(page);
   await page.locator("#rotateRight").click();
-  await sanitizeAndWait(page);
+  await page.waitForFunction(() => {
+    const i = document.querySelector<HTMLImageElement>("#outputPreview");
+    return !!i && i.naturalWidth === 32 && i.naturalHeight === 48;
+  }, null, { timeout: 25000 });
 
   const dims = await outputDims(page);
   expect(dims).toEqual({ w: 32, h: 48 });
@@ -109,8 +123,11 @@ test("rotate 90° swaps the output dimensions", async ({ page }) => {
 test("oversized inputs are still rejected (guard in wasm)", async ({ page }) => {
   // 17000px exceeds the 16384px guard; build a tall 1px-wide PNG to stay light.
   const buf = await makeImage(page, "image/png", 17000, 1);
-  await loadFile(page, "tall.png", "image/png", buf);
-  await page.getByRole("button", { name: "Sanitize" }).click();
-  await expect(page.locator(".verdict.bad")).toBeVisible({ timeout: 20000 });
+  await page.setInputFiles("#fileInput", {
+    name: "tall.png",
+    mimeType: "image/png",
+    buffer: buf,
+  });
+  await expect(page.locator(".verdict.bad")).toBeVisible({ timeout: 25000 });
   await expect(page.locator("#downloadArea a")).toHaveCount(0);
 });

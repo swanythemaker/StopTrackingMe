@@ -5,9 +5,20 @@ const BASE = process.env.URL || "http://127.0.0.1:8890";
 const OUT = "screenshots";
 mkdirSync(OUT, { recursive: true });
 
-// Draw a neutral, pleasant test image and return JPEG bytes.
-// Browser-encoded JPEG carries a JFIF APP0 marker, so the input scan
-// will report FAIL (metadata present) -> demonstrates the FAIL->PASS story.
+// Every target breakpoint from the spec. dpr 1 keeps the 4K PNGs a sane size.
+const VIEWPORTS = [
+  { label: "mobile-portrait", width: 390, height: 844, mobile: true },
+  { label: "mobile-landscape", width: 844, height: 390, mobile: true },
+  { label: "tablet-portrait", width: 768, height: 1024, mobile: true },
+  { label: "tablet-landscape", width: 1024, height: 768, mobile: true },
+  { label: "laptop-1280", width: 1280, height: 800, mobile: false },
+  { label: "laptop-1440", width: 1440, height: 900, mobile: false },
+  { label: "desktop-1080", width: 1920, height: 1080, mobile: false },
+  { label: "uhd-4k", width: 3840, height: 2160, mobile: false },
+];
+
+// A neutral test image with fake metadata cues, encoded as JPEG (carries a JFIF APP0 marker so
+// the input scan reports FAIL -> demonstrates the FAIL->clean story).
 async function makeTestImage(page) {
   const arr = await page.evaluate(async () => {
     const c = document.createElement("canvas");
@@ -31,85 +42,81 @@ async function makeTestImage(page) {
     x.fillText("vacation.jpg", 70, 260);
     x.font = "20px system-ui, sans-serif";
     x.fillText("GPS: 48.8566, 2.3522  ·  iPhone 15 Pro", 72, 300);
-    const blob = await new Promise((res) =>
-      c.toBlob((b) => res(b), "image/jpeg", 0.9),
-    );
+    const blob = await new Promise((res) => c.toBlob((b) => res(b), "image/jpeg", 0.9));
     return Array.from(new Uint8Array(await blob.arrayBuffer()));
   });
   return Buffer.from(arr);
 }
 
-async function runFlow(page, label, full = true) {
-  await page.goto(BASE, { waitUntil: "networkidle" });
-  await page.waitForSelector("#dropzone");
-  await page.screenshot({ path: `${OUT}/${label}-empty.png`, fullPage: full });
-
+async function uploadTestImage(page) {
   const buffer = await makeTestImage(page);
   await page.setInputFiles("#fileInput", {
     name: "vacation.jpg",
     mimeType: "image/jpeg",
     buffer,
   });
-  await page.waitForSelector("#results:not([hidden])");
-  await page.waitForFunction(() => {
-    const el = document.querySelector("#inputScanCard");
-    return el && el.childElementCount > 0;
-  });
-  await page.screenshot({ path: `${OUT}/${label}-loaded.png`, fullPage: full });
+}
 
-  // Open the Adjust panel and pick a resize preset — captures the new edit tools, and makes the
-  // result a resized (and cleaned) image so the verdict shows the origW×H → outW×H story.
-  await page.click("#adjustGroup > summary");
+async function shot(page, label, state, full = true) {
+  await page.screenshot({ path: `${OUT}/${label}-${state}.png`, fullPage: full });
+}
+
+async function runFlow(page, label) {
+  await page.goto(BASE, { waitUntil: "networkidle" });
+  await page.waitForSelector("#dropzone");
+  // Step 1 — upload (step 2 shows as locked in the bar).
+  await shot(page, label, "step1-empty");
+
+  await uploadTestImage(page);
+
+  // Transition — the forced ~2.5s processing slide. Catch it mid-flight.
+  await page.waitForTimeout(1100);
+  await shot(page, label, "transition");
+
+  // Step 2 — clean image (view mode).
+  await page.waitForSelector("#downloadArea a", { timeout: 25000 });
+  await page.waitForSelector(".verdict.ok");
+  await page.waitForTimeout(500); // let the carousel height settle
+  await shot(page, label, "step2-result");
+
+  // Step 2 — mini-editor open, with a resize applied (inline re-clean).
+  await page.click("#editBtn");
+  await page.waitForTimeout(250);
   await page.click('#resizeChips button[data-pct="75"]');
   await page.waitForSelector("#dimReadout:not([hidden])");
-  await page.screenshot({ path: `${OUT}/${label}-adjust.png`, fullPage: full });
+  await page.waitForTimeout(400);
+  await shot(page, label, "step2-edit");
+}
 
-  // Kick off sanitize and try to catch the loading state.
-  await page.click("#sanitizeBtn");
-  try {
-    await page.waitForSelector(".primary.loading", { timeout: 400 });
-    await page.screenshot({ path: `${OUT}/${label}-loading.png`, fullPage: full });
-  } catch {
-    /* worker finished too fast to catch the spinner */
-  }
-
-  await page.waitForSelector("#downloadArea a", { timeout: 15000 });
-  await page.waitForSelector(".verdict.ok");
-  await page.screenshot({ path: `${OUT}/${label}-result.png`, fullPage: full });
+async function runError(page, label) {
+  await page.goto(BASE, { waitUntil: "networkidle" });
+  await page.waitForSelector("#dropzone");
+  // A PNG-typed file with garbage bytes — passes the MIME gate, fails to decode → fail-closed block.
+  await page.setInputFiles("#fileInput", {
+    name: "broken.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(Array.from({ length: 256 }, (_, i) => (i * 37) % 256)),
+  });
+  await page.waitForSelector(".verdict.bad", { timeout: 25000 });
+  await page.waitForTimeout(400);
+  await shot(page, label, "error-blocked");
 }
 
 const browser = await chromium.launch();
 
-// Desktop
-const desktop = await browser.newContext({
-  viewport: { width: 1280, height: 900 },
-  deviceScaleFactor: 2,
-});
-const dpage = await desktop.newPage();
-await runFlow(dpage, "desktop");
-
-// Drag overlay (desktop) — synthesize a file dragenter.
-await dpage.evaluate(() => {
-  const dt = new DataTransfer();
-  const ev = new DragEvent("dragenter", { bubbles: true, cancelable: true });
-  Object.defineProperty(ev, "dataTransfer", { value: dt });
-  Object.defineProperty(dt, "types", { value: ["Files"] });
-  window.dispatchEvent(ev);
-});
-await dpage.waitForTimeout(250);
-await dpage.screenshot({ path: `${OUT}/desktop-dragover.png` });
-await desktop.close();
-
-// Mobile
-const mobile = await browser.newContext({
-  viewport: { width: 390, height: 844 },
-  deviceScaleFactor: 3,
-  isMobile: true,
-  hasTouch: true,
-});
-const mpage = await mobile.newPage();
-await runFlow(mpage, "mobile");
-await mobile.close();
+for (const vp of VIEWPORTS) {
+  const context = await browser.newContext({
+    viewport: { width: vp.width, height: vp.height },
+    deviceScaleFactor: 1,
+    isMobile: vp.mobile,
+    hasTouch: vp.mobile,
+  });
+  const page = await context.newPage();
+  await runFlow(page, vp.label);
+  await runError(page, vp.label);
+  await context.close();
+  console.log(`captured ${vp.label} (${vp.width}×${vp.height})`);
+}
 
 await browser.close();
 console.log("screenshots written to", OUT);

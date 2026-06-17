@@ -35,8 +35,21 @@ async function sanitizeHash(
   outputFormat: string,
 ): Promise<string> {
   const page = await browser.newPage();
+  // Skip the forced transition delay — exercises the real reduced-motion path, keeps the run fast.
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(BASE);
+
+  // Dropping the file auto-runs the first sanitize (Ultra Paranoid → PNG).
+  await page.setInputFiles("#fileInput", {
+    name: "in.png",
+    mimeType: "image/png",
+    buffer,
+  });
+  await page.locator("#downloadArea a").waitFor({ state: "visible", timeout: 30000 });
+
   if (outputFormat !== "image/png") {
+    await page.locator("#editBtn").click();
+    await page.locator("#editor").waitFor({ state: "visible" });
     await page.evaluate(() => {
       const cb = document.querySelector<HTMLInputElement>("#ultraParanoid")!;
       cb.checked = false;
@@ -44,14 +57,18 @@ async function sanitizeHash(
     });
     await page.locator("#outputFormat").selectOption(outputFormat);
   }
-  await page.setInputFiles("#fileInput", {
-    name: "in.png",
-    mimeType: "image/png",
-    buffer,
+  // Wait for the inline re-clean to settle on the requested container.
+  const kind = outputFormat.replace("image/", "");
+  await expect(page.locator("#outputReport")).toContainText(`kind: ${kind}`, {
+    timeout: 30000,
   });
-  await expect(page.locator("#sanitizeBtn")).toBeEnabled({ timeout: 25000 });
-  await page.getByRole("button", { name: "Sanitize" }).click();
-  await page.locator("#downloadArea a").waitFor({ state: "visible", timeout: 30000 });
+
+  // Leave the mini-editor so the (view-mode) download button is visible/clickable again.
+  if (await page.locator("#editDone").isVisible()) {
+    await page.locator("#editDone").click();
+    await page.locator("#downloadArea a").waitFor({ state: "visible", timeout: 10000 });
+  }
+
   // Read the cleaned bytes via the real download path (the prod CSP blocks fetch() of blob: URLs).
   const [download] = await Promise.all([
     page.waitForEvent("download"),
@@ -64,7 +81,7 @@ async function sanitizeHash(
 }
 
 test("cleaned output is byte-for-byte identical across Chromium and Firefox", async () => {
-  test.setTimeout(150000);
+  test.setTimeout(240000);
   const input = await makeInput();
   const cr = await chromium.launch();
   const ff = await firefox.launch();

@@ -29,15 +29,14 @@ test("sanitize flow does not make external network requests", async ({ page }) =
     return Array.from(new Uint8Array(await blob.arrayBuffer()));
   });
 
+  // Dropping the file auto-runs the scan + sanitize; the download link appears on success.
   tracking = true;
   await page.setInputFiles("#fileInput", {
     name: "test.png",
     mimeType: "image/png",
     buffer: Buffer.from(pngBytes),
   });
-
-  await page.getByRole("button", { name: "Sanitize" }).click();
-  await expect(page.locator("#downloadArea a")).toBeVisible();
+  await expect(page.locator("#downloadArea a")).toBeVisible({ timeout: 25000 });
 
   expect(externalRequests, `unexpected external requests: ${externalRequests.join(", ")}`).toEqual([]);
 });
