@@ -1,12 +1,12 @@
 {
   "name": "stoptrackingme",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:wasm": "wasm-pack build sanitize-core --target web --out-dir ../src/wasm --out-name sanitize_core && rm -f src/wasm/.gitignore src/wasm/package.json",
+    "build:wasm": "RUSTFLAGS=\"-C target-feature=+simd128\" wasm-pack build sanitize-core --target web --out-dir ../src/wasm --out-name sanitize_core && rm -f src/wasm/.gitignore src/wasm/package.json",
     "preview": "vite preview",
     "test:e2e": "playwright test"
   },

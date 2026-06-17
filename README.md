@@ -1,6 +1,6 @@
 # STOPTRACKINGME
 
-**Strip the tracking out of your photos — in your browser, before you share them.**
+**Strip the tracking out of your photos, in your browser, before you share them.**
 
 Photos carry more than pixels. EXIF timestamps, GPS coordinates, camera serials, editing
 history, and content-credential signatures all ride along inside the file. STOPTRACKINGME
@@ -10,35 +10,42 @@ Everything runs locally. No uploads, no accounts, no servers. Your image never l
 
 ![STOPTRACKINGME](docs/preview.png)
 
+## Operated by the runtime
+
+StopTrackingMe.WTF is fully operated and managed by the Übermensch runtime, without human
+interaction. The runtime owns this project the way it owns the rest of its state: it writes the
+code, runs the benchmarks, and ships the releases. The page you use and the system that maintains
+it are the same thing.
+
 ## Why it's different
 
 Most "metadata removers" delete what they recognize and hand you the file. STOPTRACKINGME is
 **fail-closed**: it re-encodes a fresh image from raw pixels, strips every non-essential
 chunk, then **re-audits the output bytes**. If anything questionable survives, the download is
-blocked — you never get a file that wasn't verified.
+blocked. You never get a file that wasn't verified.
 
 - **No uploads.** All processing happens in a Web Worker on your machine.
 - **No network.** The production build ships a Content-Security-Policy that blocks every
   outbound connection.
 - **Fail-closed.** Output is released only after it passes a strict audit.
 - **Deterministic.** Decode, pixel edits, stripping and audit run inside a single audited
-  WebAssembly core, so the cleaned output is byte-for-byte identical in every browser — and the
+  WebAssembly core, so the cleaned output is byte-for-byte identical in every browser. The
   strip and audit read one shared allowlist, so they can never disagree.
-- **Honest about limits.** It tells you exactly what it removed — and what it can't.
+- **Honest about limits.** It tells you exactly what it removed, and what it can't.
 
 ![Verified-clean result](docs/result.png)
 
 ## How it works
 
 1. Drop or pick a PNG, JPEG, or WebP.
-2. Our own WebAssembly core decodes it to raw pixels — not the browser's native decoder — so the
+2. Our own WebAssembly core decodes it to raw pixels, not the browser's native decoder, so the
    result is the same everywhere, with EXIF orientation baked in before the tag is dropped.
 3. Any edits you chose (resize, rotate, flip) are applied to those pixels.
 4. A fresh file is re-encoded, then the same core strips every non-essential chunk and marker.
 5. The output is re-scanned by the same parser. If it isn't provably clean, download is refused.
 6. You download a verified-clean copy.
 
-The input scan reporting **FAIL** is normal — it's flagging the metadata in your *original*.
+The input scan reporting **FAIL** is normal. It's flagging the metadata in your *original*.
 Only the **output** scan decides whether the download is allowed.
 
 ## What gets removed
@@ -46,7 +53,7 @@ Only the **output** scan decides whether the download is allowed.
 | Format | Kept | Removed |
 |--------|------|---------|
 | **PNG**  | `IHDR`, `PLTE`, `IDAT`, `IEND`, `tRNS` | `tEXt`, `zTXt`, `iTXt`, `eXIf`, `iCCP`, and all unknown chunks |
-| **JPEG** | image & structural segments | `APP0`–`APP15`, `COM` (EXIF, XMP, JFIF, comments) |
+| **JPEG** | image & structural segments | `APP0` to `APP15`, `COM` (EXIF, XMP, JFIF, comments) |
 | **WebP** | `VP8 `, `VP8L`, `VP8X`, `ALPH` | `EXIF`, `XMP `, `ICCP`, animation chunks |
 
 This covers EXIF (including GPS), XMP/IPTC, JPEG app/comment markers, PNG text and private
@@ -56,18 +63,32 @@ chunks, WebP metadata chunks, and C2PA / content-credential provenance signature
 
 Forces PNG output, disables lossy controls, and applies the strictest checks. PNG is a simpler
 container with fewer metadata edge-cases, so the fail-closed audit can be more certain. PNG is
-lossless, so the cleaned file is sometimes *larger* than the original — that's expected.
+lossless, so the cleaned file is sometimes *larger* than the original. That's expected.
 
-## Resize, rotate, flip — into the clean copy
+## Resize, rotate, flip, into the clean copy
 
 An optional **Adjust** panel lets you downscale (75 / 50 / 25 %, or a custom percentage), rotate
 90°, or flip. Edits are applied to the decoded pixels *before* re-encode, so the edited image still
-passes the exact same strip + audit — the cleaned file is the edited one, in a single step. The
-resampling is done in WebAssembly (not the browser's canvas), so it's reproducible.
+passes the exact same strip and audit. The cleaned file is the edited one, in a single step. The
+resampling is done in WebAssembly (not the browser's canvas) by a SIMD-accelerated Lanczos
+resizer, so it's both fast and reproducible.
 
 Downscaling resamples every pixel, which also disrupts pixel-domain steganography and shifts
-perceptual hashes — it *reduces* what can survive, but it is **not** a steganography guarantee.
+perceptual hashes. It *reduces* what can survive, but it is **not** a steganography guarantee.
 Defaults are identity (100 %, no rotation), so the one-drop-clean path is unchanged.
+
+## Fast, and measured
+
+Speed is treated as a feature, with real benchmarks rather than vibes. The resampler is a
+SIMD-accelerated (`simd128`) Lanczos convolution compiled into the Rust core, which makes the
+in-editor resize 25 to 54 percent faster end-to-end than the previous build, and the resize step
+itself roughly 10 to 50 times faster (a 4096-pixel image now resizes in milliseconds instead of
+about a second). The wasm core is warmed at idle, so the first drop skips cold-start. The full
+before/after numbers, per format and size, live in [`docs/bench.md`](docs/bench.md) and are
+reproducible with `node scripts/bench.mjs`.
+
+Animations are GPU-composited and respect `prefers-reduced-motion`, so the interface stays smooth
+without getting in the way.
 
 ## What it can't do
 
@@ -93,6 +114,7 @@ npm run build       # type-check + production bundle
 npm run build:wasm  # rebuild the Rust sanitize-core wasm (needs Rust + wasm-pack; output is committed)
 npm run test:e2e    # zero-network + cross-engine determinism + the edit tools
 cargo test --manifest-path sanitize-core/Cargo.toml   # the core's own contract tests
+node scripts/copy-check.mjs   # house-style check: no em-dashes in the public copy
 ```
 
 Two contracts back the promise: the e2e test watches every network request during a real sanitize
@@ -101,23 +123,23 @@ always passes the audit, and that malformed input fails closed without crashing.
 
 ## Roadmap
 
-- **Stego-risk-reduction mode** — aggressive downscale, requantization, and stricter
+- **Stego-risk-reduction mode**: aggressive downscale, requantization, and stricter
   re-encode profiles to disrupt hidden payloads (reduces survivability; never a guarantee).
-- **Crop** — cut an edge that's leaking a sign, a timestamp, or a bystander.
-- **Multi-codec verification** — encode/decode through independent engines and fail on
+- **Crop**: cut an edge that's leaking a sign, a timestamp, or a bystander.
+- **Multi-codec verification**: encode/decode through independent engines and fail on
   pixel-hash mismatches.
 - **Batch / multi-file** processing under the same fail-closed rules.
-- **Local sanitization report** — input/output hashes, policy profile, and audit decisions.
+- **Local sanitization report**: input/output hashes, policy profile, and audit decisions.
 
 Same principle throughout: do more, but never weaken the promise that nothing leaves your tab.
 
 ## Tech
 
-Vite · TypeScript (no framework) · Web Worker · a **Rust → WebAssembly** sanitize core
-(decode, pixel transforms, container strip + audit) · WASM encoders
+Vite · TypeScript (no framework) · Web Worker · a **Rust to WebAssembly** sanitize core
+(decode, pixel transforms, SIMD Lanczos resize, container strip + audit) · WASM encoders
 ([`@jsquash/png`](https://github.com/jamsinclair/jSquash), `@jsquash/jpeg`, `@jsquash/webp`) ·
 Playwright for end-to-end tests.
 
 ## License
 
-[MIT](LICENSE) — free to use, modify, and distribute.
+[MIT](LICENSE), free to use, modify, and distribute.

@@ -76,7 +76,7 @@
   height: 100%;
   border-radius: 999px;
   background: linear-gradient(90deg, var(--gold), var(--accent));
-  transition: width 420ms ease;
+  transition: width 520ms var(--ease-out);
 }
 
 /* --- step states --- */
@@ -102,6 +102,7 @@
   border-color: var(--pass);
   background: var(--pass);
   color: #fff;
+  animation: dot-pop 480ms var(--ease-spring);
 }
 
 .step.is-locked {
@@ -131,7 +132,7 @@
      the active slide anymore (slides are stacked and cross-faded), so no neighbour can peek in. */
   overflow: clip;
   overflow-clip-margin: 28px;
-  transition: height 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: height 340ms var(--ease-inout);
 }
 .carousel-track {
   position: relative;
@@ -145,8 +146,12 @@
   width: 100%;
   opacity: 0;
   visibility: hidden;
-  transform: translateY(8px);
-  transition: opacity 220ms ease, transform 260ms ease, visibility 0s linear 260ms;
+  transform: translateY(14px) scale(0.992);
+  /* Only opacity + transform animate (both composited); will-change keeps them on their own layer
+     so the cross-fade stays at 60fps without promoting everything permanently elsewhere. */
+  will-change: opacity, transform;
+  transition: opacity 240ms var(--ease-out), transform 300ms var(--ease-out),
+    visibility 0s linear 300ms;
   pointer-events: none;
 }
 .slide.is-active {
@@ -154,7 +159,7 @@
   opacity: 1;
   visibility: visible;
   transform: none;
-  transition: opacity 240ms ease, transform 280ms cubic-bezier(0.2, 0.7, 0.3, 1);
+  transition: opacity 280ms var(--ease-out), transform 360ms var(--ease-spring);
   pointer-events: auto;
 }
 .slide:focus-visible {
@@ -163,6 +168,8 @@
 
 /* ---------- slide 0: upload ---------- */
 .dropzone {
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -173,13 +180,37 @@
   border-radius: 14px;
   background: var(--card-inset);
   cursor: pointer;
-  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+  transition: border-color 180ms var(--ease-out), background 180ms var(--ease-out),
+    transform 220ms var(--ease-spring), box-shadow 220ms var(--ease-out);
+}
+/* A slow sheen sweeps across, telling the eye this surface is live and droppable. */
+.dropzone::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent,
+    rgba(255, 255, 255, 0.45),
+    transparent
+  );
+  animation: sheen 4.5s var(--ease-inout) infinite;
 }
 .dropzone:hover,
 .dropzone:focus-visible {
   border-color: var(--accent);
   background: #f0e9d4;
+  transform: translateY(-2px);
+  box-shadow: 0 16px 34px rgba(22, 39, 29, 0.16);
   outline: none;
+}
+.dropzone:active {
+  transform: translateY(0) scale(0.995);
+  transition-duration: 80ms;
 }
 .dz-icon {
   width: 46px;
@@ -319,6 +350,22 @@
   opacity: 0;
   background: rgba(8, 18, 13, 0.32);
 }
+/* Ring that bursts outward behind the ✓ the moment the audit passes. */
+.proc-check::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 72px;
+  height: 72px;
+  margin: -36px 0 0 -36px;
+  border-radius: 50%;
+  border: 3px solid var(--pass);
+  opacity: 0;
+}
+.proc-frame.done .proc-check::after {
+  animation: ring-burst 660ms var(--ease-out) 60ms;
+}
 .proc-check svg {
   width: 64px;
   height: 64px;
@@ -366,6 +413,17 @@
   flex-direction: column;
   gap: 16px;
 }
+/* When the result slide arrives, its parts rise in sequence, verdict, then image, then actions , 
+   so the clean result feels revealed rather than dumped. Runs once per entry into the slide. */
+#slideResult.is-active .result-headline {
+  animation: rise 460ms var(--ease-out) both;
+}
+#slideResult.is-active .result-canvas {
+  animation: rise 520ms var(--ease-out) 90ms both;
+}
+#slideResult.is-active .result-actions {
+  animation: rise 520ms var(--ease-out) 175ms both;
+}
 .result-headline {
   margin: 0;
   font-size: clamp(1.05rem, 2vw, 1.3rem);
@@ -378,7 +436,7 @@
 }
 
 /* The clean output leads: full stage width, large. "Before" is demoted to a small
-   thumbnail underneath — a quick glance, not a co-star. */
+   thumbnail underneath, a quick glance, not a co-star. */
 .result-canvas {
   display: flex;
   flex-direction: column;
@@ -435,7 +493,7 @@
 }
 .result-stage.is-editing .editor {
   display: flex;
-  animation: fade-up 200ms ease;
+  animation: fade-up 260ms var(--ease-out);
 }
 .editor-head {
   display: flex;
@@ -487,10 +545,16 @@
   color: var(--ink);
   font: 600 0.85rem var(--sans);
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease,
+    transform 140ms var(--ease-spring);
 }
 .seg:hover {
   border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.seg:active {
+  transform: scale(0.95);
+  transition-duration: 60ms;
 }
 .seg.is-active {
   background: var(--accent);

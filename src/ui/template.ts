@@ -1,5 +1,5 @@
 // The app's full markup, built once into #app. Split out of main.ts so the wiring logic stays
-// readable. Element ids are the contract the wiring + tests rely on — keep them stable.
+// readable. Element ids are the contract the wiring + tests rely on, so keep them stable.
 import { ICON } from "./icons";
 
 export function appMarkup(): string {
@@ -7,7 +7,7 @@ export function appMarkup(): string {
   <div class="bg-grid" aria-hidden="true"></div>
   <main class="shell">
     <!-- Hero doubles as the app chrome: full banner on the landing slide, a ~48px sticky bar
-         once an image is loaded. The step indicator folds into this bar — one bar, not two. -->
+         once an image is loaded. The step indicator folds into this bar, one bar, not two. -->
     <header class="hero" id="hero">
       <div class="hero-bar">
         <div class="hero-mark">${ICON.shield}</div>
@@ -45,7 +45,7 @@ export function appMarkup(): string {
       <div class="hero-text">
         <p class="subtitle">
           Strip EXIF, GPS, XMP, C2PA and hidden metadata from your photos.
-          Everything runs locally in your browser — your image is never uploaded.
+          Everything runs locally in your browser, and your image is never uploaded.
         </p>
         <ul class="trust" role="list">
           <li>${ICON.check}<span>No uploads</span></li>
@@ -58,7 +58,7 @@ export function appMarkup(): string {
     <div class="carousel" id="carousel">
       <div class="carousel-track" id="track">
 
-        <!-- Slide 0 — upload -->
+        <!-- Slide 0: upload -->
         <section class="slide" id="slideUpload" aria-label="Step 1: upload an image">
           <div class="panel">
             <div class="dropzone" id="dropzone" role="button" tabindex="0"
@@ -67,7 +67,7 @@ export function appMarkup(): string {
               <div class="dz-icon">${ICON.upload}</div>
               <strong class="dz-title">Drop an image here</strong>
               <span class="dz-sub">or <u>browse files</u></span>
-              <span class="dz-formats">PNG · JPEG · WebP — up to 64&nbsp;MB</span>
+              <span class="dz-formats">PNG · JPEG · WebP, up to 64&nbsp;MB</span>
             </div>
 
             <div class="filecard" id="fileCard" hidden>
@@ -83,7 +83,7 @@ export function appMarkup(): string {
           </div>
         </section>
 
-        <!-- Slide 1 — processing (the animated bridge to step 2) -->
+        <!-- Slide 1: processing (the animated bridge to step 2) -->
         <section class="slide" id="slideProcessing" aria-label="Sanitizing your image">
           <div class="panel processing">
             <div class="proc-frame" id="procFrame">
@@ -98,7 +98,7 @@ export function appMarkup(): string {
           </div>
         </section>
 
-        <!-- Slide 2 — clean image (view mode + inline mini-editor) -->
+        <!-- Slide 2: clean image (view mode + inline mini-editor) -->
         <section class="slide" id="slideResult" aria-label="Step 2: your clean image">
           <div class="panel result-stage" id="resultStage">
             <p class="result-headline" id="resultHeadline"></p>
@@ -184,7 +184,7 @@ export function appMarkup(): string {
                   <button type="button" class="seg icon-seg" id="flipH" title="Flip horizontal" aria-label="Flip horizontal">${ICON.flipH}</button>
                   <button type="button" class="seg icon-seg" id="flipV" title="Flip vertical" aria-label="Flip vertical">${ICON.flipV}</button>
                 </div>
-                <p class="adjust-note">Applied to the clean output, before re-encode. Resampling also disrupts pixel-hidden traces — it reduces, not removes.</p>
+                <p class="adjust-note">Applied to the clean output, before re-encode. Resampling also disrupts pixel-hidden traces. It reduces, not removes.</p>
               </div>
 
               <button id="editDone" class="primary" type="button">${ICON.check}<span class="btn-label">Done</span></button>
@@ -213,7 +213,7 @@ export function appMarkup(): string {
           <h2>How it works</h2>
           <ol class="how-list">
             <li>Drop or pick a PNG, JPEG or WebP image.</li>
-            <li>We decode it to raw pixels and re-encode a fresh file — no original bytes survive.</li>
+            <li>We decode it to raw pixels and re-encode a fresh file, so no original bytes survive.</li>
             <li>Format-specific stripping removes every non-essential chunk/marker.</li>
             <li>A strict audit re-scans the output. If anything looks off, download is blocked.</li>
             <li>Download your verified-clean image.</li>
@@ -222,12 +222,12 @@ export function appMarkup(): string {
         <article>
           <h2>What gets removed</h2>
           <ul class="wiki-list">
-            <li><b>EXIF</b> — camera, timestamp, and GPS location.</li>
-            <li><b>XMP / IPTC</b> — editor &amp; press metadata blocks.</li>
-            <li><b>C2PA</b> — provenance &amp; content-credential signatures.</li>
-            <li><b>JPEG APP/COM</b> — app marker segments.</li>
-            <li><b>PNG text chunks</b> — tEXt, zTXt, iTXt and vendor chunks.</li>
-            <li><b>WebP EXIF/XMP/ICCP</b> — metadata chunks.</li>
+            <li><b>EXIF</b>: camera, timestamp, and GPS location.</li>
+            <li><b>XMP / IPTC</b>: editor &amp; press metadata blocks.</li>
+            <li><b>C2PA</b>: provenance &amp; content-credential signatures.</li>
+            <li><b>JPEG APP/COM</b>: app marker segments.</li>
+            <li><b>PNG text chunks</b>: tEXt, zTXt, iTXt and vendor chunks.</li>
+            <li><b>WebP EXIF/XMP/ICCP</b>: metadata chunks.</li>
           </ul>
         </article>
       </div>
@@ -236,7 +236,7 @@ export function appMarkup(): string {
         <h2>Questions</h2>
         <details>
           <summary>Why does the input scan say FAIL?</summary>
-          <p>That just means metadata or non-essential chunks were detected in your original file — exactly the stuff this tool removes. Only the <b>output</b> scan decides whether the download is allowed.</p>
+          <p>That just means metadata or non-essential chunks were detected in your original file. That is exactly the stuff this tool removes. Only the <b>output</b> scan decides whether the download is allowed.</p>
         </details>
         <details>
           <summary>Does this upload my image anywhere?</summary>
@@ -254,11 +254,11 @@ export function appMarkup(): string {
 
       <div class="roadmap">
         <p class="roadmap-eyebrow">Where this is going</p>
-        <h2>Erase every trace — not just the ones we can name yet</h2>
+        <h2>Erase every trace, not just the ones we can name yet</h2>
         <p class="roadmap-lead">
           Today it removes the hidden data we already know how to find. But the traces worth fearing
-          are the ones built to survive a clean-up. The plan is to keep going — deeper into your
-          images, then out to everything else that quietly follows you around — without ever breaking
+          are the ones built to survive a clean-up. The plan is to keep going, deeper into your
+          images, then out to everything else that quietly follows you around, without ever breaking
           the one rule: <b>nothing leaves your device</b>.
         </p>
 
@@ -269,7 +269,7 @@ export function appMarkup(): string {
               <li>
                 <strong>See the picture, not just the data.</strong>
                 Spot faces, license plates, a reflection in a window, a landmark, or a name on a
-                screen — and offer to blur them before you share.
+                screen, and offer to blur them before you share.
               </li>
               <li>
                 <strong>Break what hides in the pixels.</strong>
@@ -289,7 +289,7 @@ export function appMarkup(): string {
             <ul class="roadmap-list" role="list">
               <li>
                 <strong>Reads your file like a paranoid expert.</strong>
-                A small model that runs entirely on your device — no upload, no server — asking one
+                A small model that runs entirely on your device, no upload, no server, asking one
                 question: could anything in here point back to you?
               </li>
               <li>
@@ -330,7 +330,7 @@ export function appMarkup(): string {
               </li>
               <li>
                 <strong>A receipt for every clean-up.</strong>
-                A local report — what went in, what came out, what was removed — that stays on your
+                A local report (what went in, what came out, what was removed) that stays on your
                 machine.
               </li>
             </ul>
@@ -338,7 +338,7 @@ export function appMarkup(): string {
         </div>
 
         <blockquote class="roadmap-quote">
-          We're not done at “we removed the location tag.” The goal is simple — <b>nothing you share
+          We're not done at “we removed the location tag.” The goal is simple: <b>nothing you share
           can be traced back to you</b>, not the obvious traces, and not the hidden ones.
         </blockquote>
       </div>

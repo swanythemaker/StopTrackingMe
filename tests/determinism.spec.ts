@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 
 // The headline v0.2 property: because decode + transforms run in OUR wasm (same module everywhere)
 // and the @jsquash encoders are the same wasm too, the cleaned output is byte-for-byte identical
-// across independent engines — something the old native-decode path could never guarantee.
+// across independent engines, something the old native-decode path could never guarantee.
 
 const BASE = "http://127.0.0.1:8890";
 
@@ -35,7 +35,7 @@ async function sanitizeHash(
   outputFormat: string,
 ): Promise<string> {
   const page = await browser.newPage();
-  // Skip the forced transition delay — exercises the real reduced-motion path, keeps the run fast.
+  // Skip the forced transition delay, exercises the real reduced-motion path, keeps the run fast.
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(BASE);
 

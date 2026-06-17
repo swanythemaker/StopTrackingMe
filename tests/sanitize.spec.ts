@@ -26,7 +26,7 @@ async function makeImage(page: Page, mime: string, w = 48, h = 32): Promise<Buff
 }
 
 // Dropping a file auto-runs the input scan + first sanitize (the carousel transition), then lands
-// on the result slide. No Sanitize button — the upload itself drives the flow.
+// on the result slide. No Sanitize button, the upload itself drives the flow.
 async function uploadAndClean(page: Page, name: string, mime: string, buffer: Buffer) {
   await page.setInputFiles("#fileInput", { name, mimeType: mime, buffer });
   await expect(page.locator("#downloadArea a")).toBeVisible({ timeout: 25000 });

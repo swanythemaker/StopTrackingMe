@@ -14,6 +14,10 @@ crate-type = ["cdylib", "rlib"]
 # (no COEP needed). The format features also pull encoders, but we never call them; LTO + strip
 # drop the dead encoder code from the release wasm. Encode stays in @jsquash on the JS side.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+# Downscale is the heaviest pixel op in the editor. fast_image_resize ships hand-written wasm
+# `simd128` convolution kernels (built when target-feature=+simd128) and fixed-point U8 math, so
+# it is both far faster than `image`'s Lanczos3 and byte-deterministic across engines.
+fast_image_resize = { version = "5", default-features = false }
 kamadak-exif = "0.6"
 wasm-bindgen = "0.2"
 serde = { version = "1", features = ["derive"] }
@@ -29,4 +33,4 @@ strip = true
 # The wasm-opt bundled with wasm-pack is old and validates without the wasm features modern rustc
 # emits by default; enable them explicitly so optimization still runs (and we keep the size win).
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = ['-Os', '--enable-bulk-memory', '--enable-nontrapping-float-to-int', '--enable-sign-ext', '--enable-mutable-globals']
+wasm-opt = ['-Os', '--enable-bulk-memory', '--enable-nontrapping-float-to-int', '--enable-sign-ext', '--enable-mutable-globals', '--enable-simd']

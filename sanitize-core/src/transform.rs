@@ -2,7 +2,9 @@
 //! still passes strip + audit. All math is pure-Rust `imageops` (no canvas), so the result is
 //! byte-identical across browser engines — the property the future report/resize feature relies on.
 
-use image::imageops::{self, FilterType};
+use fast_image_resize::images::Image as FirImage;
+use fast_image_resize::{FilterType as FirFilter, PixelType, ResizeAlg, ResizeOptions, Resizer};
+use image::imageops;
 use image::RgbaImage;
 
 /// EXIF orientation (1..=8) baked into pixels, so we can then drop the orientation tag without the
@@ -45,7 +47,9 @@ pub fn flip_vertical(img: RgbaImage) -> RgbaImage {
 }
 
 /// Resize to `pct`% of current dimensions (10..=100). Preserves aspect ratio, rounds to integer px,
-/// never < 1px, never upscales (pct is clamped to 100). Lanczos3 for quality + determinism.
+/// never < 1px, never upscales (pct is clamped to 100). Lanczos3 convolution via fast_image_resize:
+/// SIMD-accelerated (wasm `simd128`) and byte-deterministic (fixed-point U8 math, identical across
+/// engines). Falls back to `image`'s resampler only if the SIMD path can't be set up.
 pub fn resize(img: RgbaImage, pct: u32) -> RgbaImage {
     let pct = pct.clamp(10, 100);
     if pct == 100 {
@@ -57,5 +61,18 @@ pub fn resize(img: RgbaImage, pct: u32) -> RgbaImage {
     if nw == w && nh == h {
         return img;
     }
-    imageops::resize(&img, nw, nh, FilterType::Lanczos3)
+    resize_fir(&img, nw, nh).unwrap_or_else(|| {
+        imageops::resize(&img, nw, nh, image::imageops::FilterType::Lanczos3)
+    })
+}
+
+/// fast_image_resize path: RGBA8 Lanczos3 convolution. Returns None on any setup error so the
+/// caller can fall back. Deterministic: the crate uses fixed-point integer accumulation for U8x4.
+fn resize_fir(img: &RgbaImage, nw: u32, nh: u32) -> Option<RgbaImage> {
+    let (w, h) = img.dimensions();
+    let src = FirImage::from_vec_u8(w, h, img.as_raw().clone(), PixelType::U8x4).ok()?;
+    let mut dst = FirImage::new(nw, nh, PixelType::U8x4);
+    let opts = ResizeOptions::new().resize_alg(ResizeAlg::Convolution(FirFilter::Lanczos3));
+    Resizer::new().resize(&src, &mut dst, &opts).ok()?;
+    RgbaImage::from_raw(nw, nh, dst.into_vec())
 }

@@ -16,7 +16,7 @@ export type SanitizeRequest = {
   flipV: boolean;
 };
 
-// Informational input scan — auditing the original via the same wasm audit the output uses.
+// Informational input scan, auditing the original via the same wasm audit the output uses.
 export type AuditRequest = {
   kind: "audit";
   requestId: number;
@@ -24,7 +24,13 @@ export type AuditRequest = {
   inputBuffer: ArrayBuffer;
 };
 
-export type WorkerRequest = SanitizeRequest | AuditRequest;
+// Pre-instantiate the wasm module at idle so the first real job skips cold-start.
+export type WarmRequest = {
+  kind: "warm";
+  requestId: number;
+};
+
+export type WorkerRequest = SanitizeRequest | AuditRequest | WarmRequest;
 
 export type SanitizeStage = "read" | "decode" | "encode" | "strip" | "audit";
 
@@ -33,6 +39,15 @@ export type WorkerProgress = {
   requestId: number;
   stage: SanitizeStage;
   pct: number;
+};
+
+// Wall-clock split of the worker pipeline (decode+transform / encode / strip+audit). Additive;
+// purely diagnostic, consumed by scripts/bench.mjs. All values in milliseconds.
+export type SanitizeTiming = {
+  decodeMs: number;
+  encodeMs: number;
+  stripMs: number;
+  totalMs: number;
 };
 
 export type WorkerSuccess = {
@@ -47,6 +62,7 @@ export type WorkerSuccess = {
   height: number; // output height (after transforms)
   origWidth: number; // decoded upright width, before user transforms
   origHeight: number;
+  timing: SanitizeTiming;
 };
 
 export type WorkerFailure = {
@@ -62,5 +78,10 @@ export type AuditDone = {
   audit: AuditSummary;
 };
 
-export type WorkerResponse = WorkerSuccess | WorkerFailure | AuditDone;
+export type WarmDone = {
+  type: "warm-done";
+  requestId: number;
+};
+
+export type WorkerResponse = WorkerSuccess | WorkerFailure | AuditDone | WarmDone;
 export type WorkerMessage = WorkerProgress | WorkerResponse;

@@ -115,7 +115,7 @@ let inputPreviewUrl: string | null = null;
 let outputPreviewUrl: string | null = null;
 let dragDepth = 0;
 
-// Adjust (edit tools) state — defaults are identity, so the one-drop-clean path is unchanged.
+// Adjust (edit tools) state, defaults are identity, so the one-drop-clean path is unchanged.
 let resizePct = 100;
 let customResize = false;
 let rotateDeg = 0;
@@ -406,8 +406,8 @@ function populateResult(res: {
   resultHeadline.classList.remove("bad");
   resultHeadline.textContent =
     n > 0
-      ? `✓ Stripped — ${n} hidden ${n === 1 ? "tag" : "tags"} removed`
-      : "✓ Clean — re-encoded with no metadata";
+      ? `✓ Stripped: ${n} hidden ${n === 1 ? "tag" : "tags"} removed`
+      : "✓ Clean: re-encoded with no metadata";
   setStatus("Done. Output passed the strict fail-closed audit.", "good");
 }
 
@@ -422,7 +422,7 @@ function populateError(message: string): void {
   renderVerdict(verdict, false, info.detail, undefined, info.title);
   renderScanCard(outputScanCard, null, "Output scan", message);
   resultHeadline.classList.add("bad");
-  resultHeadline.textContent = "Export blocked — nothing to download";
+  resultHeadline.textContent = "Export blocked: nothing to download";
   setStatus(info.status, "bad");
 }
 
@@ -586,3 +586,47 @@ function syncUltraParanoidUi(): void {
     outputFormat.value = "image/png";
   }
 }
+
+// ---- warm the wasm core off the critical path ----
+// The worker instantiates the wasm lazily on first use; doing it at idle means the first real
+// drop skips cold-start (one-time ~tens of ms). Fire-and-forget; failures are harmless (the
+// first sanitize will just instantiate on demand as before).
+function warmCore(): void {
+  void client.warm().catch(() => {});
+}
+const ric: typeof window.requestIdleCallback | undefined = window.requestIdleCallback;
+if (typeof ric === "function") {
+  ric(warmCore, { timeout: 2000 });
+} else {
+  window.setTimeout(warmCore, 200);
+}
+
+// ---- benchmark hook (scripts/bench.mjs) ----
+// Runs the raw worker pipeline for a given buffer and returns the per-stage timing, with no UI
+// or forced-animation overhead. Lets the bench measure the actual decode/encode/strip cost.
+(window as unknown as { __sanitizeBench?: unknown }).__sanitizeBench = async (
+  buffer: ArrayBuffer,
+  sourceType: string,
+  outputType: SupportedFormat | "same",
+  ultra: boolean,
+  resizePct = 100,
+) => {
+  const res = await client.sanitize({
+    sourceName: "bench",
+    sourceType,
+    inputBuffer: buffer,
+    outputType,
+    quality: 0.92,
+    ultraParanoid: ultra,
+    resizePct,
+    rotate: 0,
+    flipH: false,
+    flipV: false,
+  });
+  return {
+    timing: res.timing,
+    outBytes: res.outputBuffer.byteLength,
+    width: res.width,
+    height: res.height,
+  };
+};

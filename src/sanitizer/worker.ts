@@ -19,7 +19,7 @@ import type {
   WorkerResponse,
 } from "./types";
 // Import the encoder entry points directly (not the package index) so the jsquash *decoder* wasms
-// are never referenced — decode is now ours, in sanitize-core. Drops ~300 KB of dead codec wasm.
+// are never referenced, decode is now ours, in sanitize-core. Drops ~300 KB of dead codec wasm.
 import encodeJpeg from "@jsquash/jpeg/encode";
 import encodePng from "@jsquash/png/encode";
 import encodeWebp from "@jsquash/webp/encode";
@@ -39,6 +39,11 @@ function ensureWasm(): Promise<unknown> {
 
 self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
   const payload = event.data;
+  if (payload.kind === "warm") {
+    await ensureWasm();
+    self.postMessage({ type: "warm-done", requestId: payload.requestId });
+    return;
+  }
   if (payload.kind === "audit") {
     await handleAudit(payload);
     return;
@@ -92,7 +97,7 @@ async function sanitize(
   }
   if (request.inputBuffer.byteLength > MAX_INPUT_BYTES) {
     throw new Error(
-      `File is ${mb(request.inputBuffer.byteLength)} — over the ${mb(MAX_INPUT_BYTES)} limit.`,
+      `File is ${mb(request.inputBuffer.byteLength)}, over the ${mb(MAX_INPUT_BYTES)} limit.`,
     );
   }
   const inputByteLength = request.inputBuffer.byteLength;
@@ -107,6 +112,7 @@ async function sanitize(
   }
 
   await ensureWasm();
+  const tStart = performance.now();
 
   // 1. Decode + pixel transforms in our deterministic wasm (replaces native createImageBitmap).
   report(request.requestId, "decode", 25);
@@ -123,6 +129,7 @@ async function sanitize(
   const origHeight = decoded.origHeight;
   const rgba = decoded.takeRgba();
   const imageData = new ImageData(new Uint8ClampedArray(rgba), width, height);
+  const tDecoded = performance.now();
 
   // 2. Re-encode a fresh file via the @jsquash encoders (unchanged trust boundary).
   report(request.requestId, "encode", 55);
@@ -131,10 +138,12 @@ async function sanitize(
     imageData,
     clampQuality(outputType, request.quality),
   );
+  const tEncoded = performance.now();
 
   // 3. Strip-to-allowlist + 4. fail-closed audit, both in wasm off one allowlist.
   report(request.requestId, "strip", 80);
   const result = stripAndAudit(new Uint8Array(encoded), outputType);
+  const tStripped = performance.now();
 
   report(request.requestId, "audit", 95);
   const outputAudit = JSON.parse(result.auditJson) as AuditSummary;
@@ -159,6 +168,12 @@ async function sanitize(
     height,
     origWidth,
     origHeight,
+    timing: {
+      decodeMs: tDecoded - tStart,
+      encodeMs: tEncoded - tDecoded,
+      stripMs: tStripped - tEncoded,
+      totalMs: tStripped - tStart,
+    },
   };
 }
 

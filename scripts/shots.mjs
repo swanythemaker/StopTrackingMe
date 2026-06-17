@@ -64,22 +64,22 @@ async function shot(page, label, state, full = true) {
 async function runFlow(page, label) {
   await page.goto(BASE, { waitUntil: "networkidle" });
   await page.waitForSelector("#dropzone");
-  // Step 1 — upload (step 2 shows as locked in the bar).
+  // Step 1, upload (step 2 shows as locked in the bar).
   await shot(page, label, "step1-empty");
 
   await uploadTestImage(page);
 
-  // Transition — the forced ~2.5s processing slide. Catch it mid-flight.
+  // Transition, the forced ~2.5s processing slide. Catch it mid-flight.
   await page.waitForTimeout(1100);
   await shot(page, label, "transition");
 
-  // Step 2 — clean image (view mode).
+  // Step 2, clean image (view mode).
   await page.waitForSelector("#downloadArea a", { timeout: 25000 });
   await page.waitForSelector(".verdict.ok");
   await page.waitForTimeout(500); // let the carousel height settle
   await shot(page, label, "step2-result");
 
-  // Step 2 — mini-editor open, with a resize applied (inline re-clean).
+  // Step 2, mini-editor open, with a resize applied (inline re-clean).
   await page.click("#editBtn");
   await page.waitForTimeout(250);
   await page.click('#resizeChips button[data-pct="75"]');
@@ -91,7 +91,7 @@ async function runFlow(page, label) {
 async function runError(page, label) {
   await page.goto(BASE, { waitUntil: "networkidle" });
   await page.waitForSelector("#dropzone");
-  // A PNG-typed file with garbage bytes — passes the MIME gate, fails to decode → fail-closed block.
+  // A PNG-typed file with garbage bytes, passes the MIME gate, fails to decode → fail-closed block.
   await page.setInputFiles("#fileInput", {
     name: "broken.png",
     mimeType: "image/png",

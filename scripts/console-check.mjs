@@ -30,8 +30,8 @@ await page.screenshot({ path: "screenshots/check-full.png", fullPage: true });
 await browser.close();
 
 if (msgs.length) {
-  console.log("CONSOLE NOT CLEAN — " + msgs.length + " message(s):");
+  console.log("CONSOLE NOT CLEAN, " + msgs.length + " message(s):");
   for (const m of msgs) console.log("  " + m);
   process.exit(1);
 }
-console.log("CONSOLE CLEAN — no errors/warnings/failed requests.");
+console.log("CONSOLE CLEAN, no errors/warnings/failed requests.");

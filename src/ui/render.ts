@@ -31,7 +31,7 @@ export function renderVerdict(
   body.className = "verdict-body";
 
   const title = document.createElement("strong");
-  title.textContent = ok ? "Clean — safe to download" : titleOverride || "Export blocked";
+  title.textContent = ok ? "Clean: safe to download" : titleOverride || "Export blocked";
   body.appendChild(title);
 
   const sub = document.createElement("p");

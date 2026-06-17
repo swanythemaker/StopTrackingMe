@@ -29,25 +29,25 @@ export function explainError(raw: string): {
   if (/(over the|exceed|too large|MP limit)/i.test(e)) {
     return {
       title: "Image too large",
-      status: `Blocked — ${e}`,
+      status: `Blocked: ${e}`,
       detail: `${e} Try a smaller image, or resize it before sanitizing.`,
     };
   }
   if (/(could not be decoded|unsupported|disguised|corrupt|not a (png|jpeg|webp))/i.test(e)) {
     return {
       title: "Couldn't read this image",
-      status: `Blocked — ${e}`,
+      status: `Blocked: ${e}`,
       detail: e,
     };
   }
   if (/audit/i.test(e)) {
     return {
       title: "Export blocked by audit",
-      status: "Blocked — output failed the strict safety audit.",
+      status: "Blocked: output failed the strict safety audit.",
       detail: `${e} The cleaned file was not provably safe, so download was refused (fail-closed).`,
     };
   }
-  return { title: "Couldn't process this image", status: `Blocked — ${e}`, detail: e };
+  return { title: "Couldn't process this image", status: `Blocked: ${e}`, detail: e };
 }
 
 export function must<T extends HTMLElement>(selector: string): T {

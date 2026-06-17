@@ -1,0 +1,190 @@
+// Real, repeatable performance benchmark for the sanitize pipeline.
+//
+// Drives the app's `window.__sanitizeBench` hook (main.ts), which runs the actual worker
+// pipeline (wasm decode+transform -> jsquash encode -> wasm strip+audit) and returns the
+// per-stage wall-clock split, across a grid of image sizes and formats. Reports p50/p95.
+//
+// Usage:
+//   node scripts/bench.mjs                  # label "current"
+//   BENCH_LABEL=baseline node scripts/bench.mjs
+//   BENCH_LABEL=simd     node scripts/bench.mjs
+//
+// Each run writes docs/bench-<label>.json. docs/bench.md is regenerated from ALL bench-*.json
+// found, so two runs (e.g. baseline + simd) auto-produce a side-by-side delta table.
+//
+// Needs the dev server up (npm run dev -- --host 127.0.0.1 --port 8890).
+
+import { chromium } from "@playwright/test";
+import { mkdirSync, writeFileSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
+const BASE = process.env.URL || "http://127.0.0.1:8890";
+const LABEL = process.env.BENCH_LABEL || "current";
+const N = Number(process.env.BENCH_N || 15); // measured runs per cell
+const WARMUP = Number(process.env.BENCH_WARMUP || 3); // discarded runs (JIT, caches)
+const DOCS = "docs";
+mkdirSync(DOCS, { recursive: true });
+
+const SIZES = [512, 2048, 4096];
+const FORMATS = [
+  { mime: "image/png", short: "png" },
+  { mime: "image/jpeg", short: "jpeg" },
+  { mime: "image/webp", short: "webp" },
+];
+
+function pct(arr, p) {
+  if (!arr.length) return 0;
+  const s = [...arr].sort((a, b) => a - b);
+  const i = Math.min(s.length - 1, Math.max(0, Math.ceil((p / 100) * s.length) - 1));
+  return s[i];
+}
+const r1 = (x) => Math.round(x * 10) / 10;
+
+// Runs the whole measurement loop inside the page so buffers never cross the process boundary.
+async function benchCell(page, size, mime, resizePct, n, warmup) {
+  return page.evaluate(
+    async ({ size, mime, resizePct, n, warmup }) => {
+      const c = document.createElement("canvas");
+      c.width = size;
+      c.height = size;
+      const x = c.getContext("2d");
+      const g = x.createLinearGradient(0, 0, size, size);
+      g.addColorStop(0, "#123a2a");
+      g.addColorStop(0.5, "#1f6f4a");
+      g.addColorStop(1, "#d4b25a");
+      x.fillStyle = g;
+      x.fillRect(0, 0, size, size);
+      // Some structure so encoders have real work (not a flat fill that compresses to nothing).
+      for (let i = 0; i < 240; i++) {
+        x.fillStyle = `hsla(${(i * 37) % 360},60%,55%,0.10)`;
+        x.beginPath();
+        x.arc((i * 131) % size, (i * 71) % size, 8 + ((i * 13) % 60), 0, Math.PI * 2);
+        x.fill();
+      }
+      const blob = await new Promise((res) => c.toBlob((b) => res(b), mime, 0.92));
+      const baseBuf = await blob.arrayBuffer();
+      const inBytes = baseBuf.byteLength;
+
+      const bench = window.__sanitizeBench;
+      const decode = [];
+      const encode = [];
+      const strip = [];
+      const total = [];
+      let outBytes = 0;
+      for (let i = 0; i < warmup + n; i++) {
+        // inputBuffer is transferred (neutered) by the worker postMessage, so copy each run.
+        const buf = baseBuf.slice(0);
+        const res = await bench(buf, mime, "same", false, resizePct);
+        if (i >= warmup) {
+          decode.push(res.timing.decodeMs);
+          encode.push(res.timing.encodeMs);
+          strip.push(res.timing.stripMs);
+          total.push(res.timing.totalMs);
+        }
+        outBytes = res.outBytes;
+      }
+      return { decode, encode, strip, total, inBytes, outBytes };
+    },
+    { size, mime, resizePct, n, warmup },
+  );
+}
+
+const browser = await chromium.launch();
+const page = await browser.newPage();
+await page.goto(BASE, { waitUntil: "networkidle" });
+await page.waitForFunction(() => typeof window.__sanitizeBench === "function", { timeout: 15000 });
+
+// resize 100 = decode-only (the default one-drop path); 50 = exercises the Lanczos resize kernel.
+const RESIZES = [100, 50];
+const rows = [];
+for (const size of SIZES) {
+  for (const f of FORMATS) {
+    for (const resizePct of RESIZES) {
+      const cell = await benchCell(page, size, f.mime, resizePct, N, WARMUP);
+      const row = {
+        size,
+        format: f.short,
+        resize: resizePct,
+        inKB: r1(cell.inBytes / 1024),
+        outKB: r1(cell.outBytes / 1024),
+        decodeP50: r1(pct(cell.decode, 50)),
+        decodeP95: r1(pct(cell.decode, 95)),
+        encodeP50: r1(pct(cell.encode, 50)),
+        stripP50: r1(pct(cell.strip, 50)),
+        totalP50: r1(pct(cell.total, 50)),
+        totalP95: r1(pct(cell.total, 95)),
+      };
+      rows.push(row);
+      console.log(
+        `${f.short.padEnd(4)} ${String(size).padStart(4)}² r${String(resizePct).padStart(3)}  ` +
+          `decode p50 ${row.decodeP50}ms  encode ${row.encodeP50}ms  strip ${row.stripP50}ms  ` +
+          `total p50 ${row.totalP50}ms / p95 ${row.totalP95}ms`,
+      );
+    }
+  }
+}
+
+await browser.close();
+
+const payload = {
+  label: LABEL,
+  when: new Date().toISOString(),
+  base: BASE,
+  n: N,
+  warmup: WARMUP,
+  ua: "chromium",
+  rows,
+};
+const outPath = join(DOCS, `bench-${LABEL}.json`);
+writeFileSync(outPath, JSON.stringify(payload, null, 2));
+console.log("wrote", outPath);
+
+// ---- regenerate docs/bench.md from all bench-*.json (side-by-side if more than one) ----
+const files = readdirSync(DOCS)
+  .filter((f) => f.startsWith("bench-") && f.endsWith(".json"))
+  .sort();
+const runs = files.map((f) => JSON.parse(readFileSync(join(DOCS, f), "utf8")));
+const key = (r) => `${r.format} ${r.size}² r${r.resize ?? 100}`;
+
+let md = `# Sanitize pipeline benchmark\n\n`;
+md += `Per-stage worker timing (wasm decode+transform → jsquash encode → wasm strip+audit), `;
+md += `measured via \`window.__sanitizeBench\` over the real pipeline. Chromium headless, `;
+md += `dpr 1, square synthetic images. Times in **ms**, lower is better.\n\n`;
+for (const run of runs) {
+  md += `- **${run.label}**, ${run.when} · ${run.n} runs/cell (warmup ${run.warmup})\n`;
+}
+md += `\n`;
+
+if (runs.length >= 2) {
+  // Comparison table: total p50 per label + % delta of the last vs the first.
+  const first = runs[0];
+  const last = runs[runs.length - 1];
+  const byKeyLast = new Map(last.rows.map((r) => [key(r), r]));
+  md += `## Total p50 by build (ms), speedup = (${first.label} − ${last.label}) / ${first.label}\n\n`;
+  md += `| image | ${runs.map((r) => r.label).join(" | ")} | speedup |\n`;
+  md += `|---|${runs.map(() => "--:").join("|")}|--:|\n`;
+  for (const fr of first.rows) {
+    const k = key(fr);
+    const cells = runs.map((r) => {
+      const row = r.rows.find((x) => key(x) === k);
+      return row ? row.totalP50.toFixed(1) : "-";
+    });
+    const lr = byKeyLast.get(k);
+    const speed = lr && fr.totalP50 > 0 ? `${Math.round((1 - lr.totalP50 / fr.totalP50) * 100)}%` : "-";
+    md += `| ${k} | ${cells.join(" | ")} | ${speed} |\n`;
+  }
+  md += `\n`;
+}
+
+// Full per-stage table for the most recent run.
+const latest = runs.find((r) => r.label === LABEL) || runs[runs.length - 1];
+md += `## ${latest.label}, full stage breakdown\n\n`;
+md += `| image | in KB | out KB | decode+resize p50 | decode p95 | encode p50 | strip p50 | total p50 | total p95 |\n`;
+md += `|---|--:|--:|--:|--:|--:|--:|--:|--:|\n`;
+for (const r of latest.rows) {
+  md += `| ${key(r)} | ${r.inKB} | ${r.outKB} | ${r.decodeP50} | ${r.decodeP95} | ${r.encodeP50} | ${r.stripP50} | ${r.totalP50} | ${r.totalP95} |\n`;
+}
+md += `\n_Generated by \`scripts/bench.mjs\`._\n`;
+
+writeFileSync(join(DOCS, "bench.md"), md);
+console.log("wrote", join(DOCS, "bench.md"));

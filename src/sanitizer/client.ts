@@ -4,6 +4,7 @@
 import type {
   AuditDone,
   SanitizeStage,
+  WarmDone,
   WorkerFailure,
   WorkerMessage,
   WorkerRequest,
@@ -12,7 +13,8 @@ import type {
 
 type Pending =
   | { kind: "sanitize"; resolve: (v: WorkerSuccess) => void; reject: (e: Error) => void; onProgress?: ProgressFn }
-  | { kind: "audit"; resolve: (v: AuditDone) => void; reject: (e: Error) => void };
+  | { kind: "audit"; resolve: (v: AuditDone) => void; reject: (e: Error) => void }
+  | { kind: "warm"; resolve: (v: WarmDone) => void; reject: (e: Error) => void };
 
 export type ProgressFn = (stage: SanitizeStage, pct: number) => void;
 
@@ -47,7 +49,7 @@ export class SanitizeClient {
     });
   }
 
-  /** Informational input scan. Never rejects in practice — the worker always returns a summary. */
+  /** Informational input scan. Never rejects in practice, the worker always returns a summary. */
   audit(
     req: Omit<Extract<WorkerRequest, { kind: "audit" }>, "requestId" | "kind">,
   ): Promise<AuditDone> {
@@ -60,6 +62,15 @@ export class SanitizeClient {
     return new Promise<AuditDone>((resolve, reject) => {
       this.pending.set(requestId, { kind: "audit", resolve, reject });
       this.worker.postMessage(full, [full.inputBuffer]);
+    });
+  }
+
+  /** Pre-instantiate the wasm core off the critical path (call at idle). Safe to call once. */
+  warm(): Promise<WarmDone> {
+    const requestId = ++this.nextId;
+    return new Promise<WarmDone>((resolve, reject) => {
+      this.pending.set(requestId, { kind: "warm", resolve, reject });
+      this.worker.postMessage({ kind: "warm", requestId });
     });
   }
 
@@ -76,6 +87,11 @@ export class SanitizeClient {
 
     if (msg.type === "audit-done") {
       if (p.kind === "audit") p.resolve(msg);
+      return;
+    }
+
+    if (msg.type === "warm-done") {
+      if (p.kind === "warm") p.resolve(msg);
       return;
     }
 

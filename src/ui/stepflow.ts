@@ -29,7 +29,7 @@ export class StepFlow {
 
     // Keep the container height glued to the active slide as its content reflows
     // (edit toggle, re-clean swapping a taller/shorter image, font load, etc.).
-    // We only ever measure the active slide, so only observe the active slide —
+    // We only ever measure the active slide, so only observe the active slide , 
     // observing the two off-screen ones just fired redundant callbacks.
     this.ro = new ResizeObserver(() => this.syncHeight());
     window.addEventListener("resize", () => this.syncHeight());
@@ -64,7 +64,7 @@ export class StepFlow {
   }
 
   private apply(focus: boolean): void {
-    // Slides cross-fade in place (see stepflow.css) — no track translation here anymore.
+    // Slides cross-fade in place (see stepflow.css), no track translation here anymore.
 
     // Landing (upload slide) shows the full hero + page; once we're working the hero
     // collapses to a sticky bar and the marketing/docs weight drops out of layout.
