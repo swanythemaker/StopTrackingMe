@@ -124,22 +124,38 @@
   width: 100%;
 }
 
-/* ---------- carousel ---------- */
+/* ---------- carousel (cross-fade, not a slider) ---------- */
 .carousel {
-  /* `clip` lets the panel shadow bleed a little while still hiding the off-screen slides. */
+  position: relative;
+  /* `clip` + a small margin only lets the active panel's shadow bleed. Nothing sits beside
+     the active slide anymore (slides are stacked and cross-faded), so no neighbour can peek in. */
   overflow: clip;
   overflow-clip-margin: 28px;
-  transition: height 380ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: height 300ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 .carousel-track {
-  display: flex;
-  width: 300%;
-  transition: transform 440ms cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
 }
+/* Each slide is its own screen: stacked in the same spot, faded in place. The active one is
+   in normal flow (so it alone drives the container height); the rest are taken out of flow. */
 .slide {
-  flex: 0 0 33.3333%;
-  min-width: 0;
-  align-self: flex-start;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px);
+  transition: opacity 220ms ease, transform 260ms ease, visibility 0s linear 260ms;
+  pointer-events: none;
+}
+.slide.is-active {
+  position: relative;
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: opacity 240ms ease, transform 280ms cubic-bezier(0.2, 0.7, 0.3, 1);
+  pointer-events: auto;
 }
 .slide:focus-visible {
   outline: none;
@@ -361,15 +377,27 @@
   color: var(--fail);
 }
 
+/* The clean output leads: full stage width, large. "Before" is demoted to a small
+   thumbnail underneath — a quick glance, not a co-star. */
 .result-canvas {
-  display: grid;
-  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr);
-  gap: 12px;
-  align-items: start;
-  transition: grid-template-columns 220ms ease;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
-.result-stage.is-editing .result-canvas {
-  grid-template-columns: 1fr;
+.preview-out .preview-frame img {
+  max-height: clamp(320px, 52vh, 520px);
+}
+.preview-before {
+  max-width: 190px;
+}
+.preview-before figcaption {
+  font-size: 0.78rem;
+}
+.preview-before .preview-frame {
+  min-height: 0;
+}
+.preview-before .preview-frame img {
+  max-height: 124px;
 }
 .result-stage.is-editing .preview-before {
   display: none;

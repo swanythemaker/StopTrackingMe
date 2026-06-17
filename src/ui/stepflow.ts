@@ -6,24 +6,22 @@ export type Slide = 0 | 1 | 2; // 0 upload · 1 processing · 2 result
 
 export class StepFlow {
   private carousel: HTMLElement;
-  private track: HTMLElement;
   private slides: HTMLElement[];
   private stepUpload: HTMLElement;
   private stepClean: HTMLElement;
   private resultStage: HTMLElement;
+  private ro: ResizeObserver;
   private current: Slide = 0;
   private editing = false;
 
   constructor(els: {
     carousel: HTMLElement;
-    track: HTMLElement;
     slides: [HTMLElement, HTMLElement, HTMLElement];
     stepUpload: HTMLElement;
     stepClean: HTMLElement;
     resultStage: HTMLElement;
   }) {
     this.carousel = els.carousel;
-    this.track = els.track;
     this.slides = els.slides;
     this.stepUpload = els.stepUpload;
     this.stepClean = els.stepClean;
@@ -31,8 +29,9 @@ export class StepFlow {
 
     // Keep the container height glued to the active slide as its content reflows
     // (edit toggle, re-clean swapping a taller/shorter image, font load, etc.).
-    const ro = new ResizeObserver(() => this.syncHeight());
-    for (const s of this.slides) ro.observe(s);
+    // We only ever measure the active slide, so only observe the active slide —
+    // observing the two off-screen ones just fired redundant callbacks.
+    this.ro = new ResizeObserver(() => this.syncHeight());
     window.addEventListener("resize", () => this.syncHeight());
 
     this.apply(false);
@@ -65,16 +64,23 @@ export class StepFlow {
   }
 
   private apply(focus: boolean): void {
-    this.track.style.transform = `translateX(-${(100 / 3) * this.current}%)`;
+    // Slides cross-fade in place (see stepflow.css) — no track translation here anymore.
+
+    // Landing (upload slide) shows the full hero + page; once we're working the hero
+    // collapses to a sticky bar and the marketing/docs weight drops out of layout.
+    document.body.dataset.mode = this.current === 0 ? "landing" : "working";
 
     this.slides.forEach((s, i) => {
       const active = i === this.current;
       s.classList.toggle("is-active", active);
-      // `inert` keeps off-screen slides out of tab order + a11y tree without display:none,
-      // so we can still measure their height.
+      // `inert` keeps off-screen slides out of tab order + a11y tree without display:none.
       if (active) s.removeAttribute("inert");
       else s.setAttribute("inert", "");
     });
+
+    // Re-point the height observer at the (single) active slide.
+    this.ro.disconnect();
+    this.ro.observe(this.slides[this.current]);
 
     this.renderStepBar();
     this.syncHeight();

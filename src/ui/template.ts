@@ -6,12 +6,42 @@ export function appMarkup(): string {
   return `
   <div class="bg-grid" aria-hidden="true"></div>
   <main class="shell">
-    <header class="hero">
-      <p class="eyebrow">Browser-only image sanitizer</p>
-      <div class="hero-lockup">
+    <!-- Hero doubles as the app chrome: full banner on the landing slide, a ~48px sticky bar
+         once an image is loaded. The step indicator folds into this bar — one bar, not two. -->
+    <header class="hero" id="hero">
+      <div class="hero-bar">
         <div class="hero-mark">${ICON.shield}</div>
-        <h1>STOP<span>TRACKING</span>ME</h1>
+        <div class="hero-headline">
+          <p class="eyebrow">Browser-only image sanitizer</p>
+          <h1>STOP<span>TRACKING</span>ME</h1>
+        </div>
+
+        <nav class="stepbar" aria-label="Progress">
+          <ol class="steps">
+            <li class="step is-active" id="stepUpload" data-step="1" aria-current="step">
+              <span class="step-dot">
+                <span class="step-num">1</span>
+                <span class="step-ico step-ico-check">${ICON.check}</span>
+                <span class="step-ico step-ico-lock">${ICON.lock}</span>
+              </span>
+              <span class="step-label">Upload<small class="step-hint">Drop an image</small></span>
+            </li>
+            <li class="step-connector" aria-hidden="true"><i class="connector-fill"></i></li>
+            <li class="step is-locked" id="stepClean" data-step="2" aria-disabled="true">
+              <span class="step-dot">
+                <span class="step-num">2</span>
+                <span class="step-ico step-ico-check">${ICON.check}</span>
+                <span class="step-ico step-ico-lock">${ICON.lock}</span>
+              </span>
+              <span class="step-label">Clean image<small class="step-hint">Upload first</small></span>
+            </li>
+          </ol>
+        </nav>
+
+        <button id="barReset" class="bar-reset" type="button"
+                aria-label="Start over with a new image">${ICON.refresh}<span>New image</span></button>
       </div>
+
       <div class="hero-text">
         <p class="subtitle">
           Strip EXIF, GPS, XMP, C2PA and hidden metadata from your photos.
@@ -24,28 +54,6 @@ export function appMarkup(): string {
         </ul>
       </div>
     </header>
-
-    <nav class="stepbar" aria-label="Progress">
-      <ol class="steps">
-        <li class="step is-active" id="stepUpload" data-step="1" aria-current="step">
-          <span class="step-dot">
-            <span class="step-num">1</span>
-            <span class="step-ico step-ico-check">${ICON.check}</span>
-            <span class="step-ico step-ico-lock">${ICON.lock}</span>
-          </span>
-          <span class="step-label">Upload<small class="step-hint">Drop an image</small></span>
-        </li>
-        <li class="step-connector" aria-hidden="true"><i class="connector-fill"></i></li>
-        <li class="step is-locked" id="stepClean" data-step="2" aria-disabled="true">
-          <span class="step-dot">
-            <span class="step-num">2</span>
-            <span class="step-ico step-ico-check">${ICON.check}</span>
-            <span class="step-ico step-ico-lock">${ICON.lock}</span>
-          </span>
-          <span class="step-label">Clean image<small class="step-hint">Upload first</small></span>
-        </li>
-      </ol>
-    </nav>
 
     <div class="carousel" id="carousel">
       <div class="carousel-track" id="track">

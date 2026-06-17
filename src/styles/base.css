@@ -49,11 +49,23 @@ body {
   color: var(--ink);
   font-family: var(--sans);
   line-height: 1.5;
+  background: var(--bg);
+}
+
+/* The page gradient and grid both live on fixed, GPU-promoted layers. Painting them via
+   `background-attachment: fixed` on <body> forced a full-viewport repaint on every scroll
+   frame (the measured scroll jank); their own composited layers scroll for free. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  transform: translateZ(0);
   background:
     radial-gradient(900px 600px at 12% -5%, #1c4732 0%, transparent 55%),
     radial-gradient(820px 560px at 92% 8%, #5c2a16 0%, transparent 50%),
     linear-gradient(160deg, var(--bg) 0%, #0a1411 60%, #0b1a14 100%);
-  background-attachment: fixed;
 }
 
 .bg-grid {
@@ -61,6 +73,7 @@ body {
   inset: 0;
   pointer-events: none;
   z-index: 0;
+  transform: translateZ(0);
   background-image:
     linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
@@ -82,16 +95,15 @@ body {
   gap: clamp(16px, 2.4vw, 26px);
 }
 
-/* ---------- hero ---------- */
+/* ---------- hero (full banner ↔ sticky bar) ---------- */
 .hero {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
   padding: 6px 4px;
+  transition: padding 280ms ease;
 }
-.hero-lockup {
+.hero-bar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: clamp(12px, 1.6vw, 18px);
 }
 .hero-mark {
@@ -104,18 +116,25 @@ body {
   color: #0c1f16;
   background: linear-gradient(145deg, var(--gold), #b5923c);
   box-shadow: 0 10px 28px rgba(212, 178, 90, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  transition: width 280ms ease, height 280ms ease, border-radius 280ms ease;
 }
 .hero-mark svg {
   width: 56%;
   height: 56%;
 }
+.hero-headline {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
 .eyebrow {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   font-size: 0.74rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--gold);
   font-weight: 600;
+  transition: max-height 240ms ease, opacity 200ms ease, margin 240ms ease;
 }
 .hero h1 {
   margin: 0;
@@ -124,9 +143,114 @@ body {
   letter-spacing: -0.02em;
   font-size: clamp(2rem, 6vw, 3.4rem);
   color: #f6f3e9;
+  transition: font-size 280ms ease;
 }
 .hero h1 span {
   color: var(--accent-hi);
+}
+.hero-text {
+  overflow: hidden;
+  transition: max-height 320ms ease, opacity 240ms ease, margin 320ms ease;
+}
+/* "New image" reset lives in the bar; only earns its place once we're working. */
+.bar-reset {
+  display: none;
+  margin-left: auto;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  padding: 8px 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e8f0e9;
+  font: 600 0.86rem var(--sans);
+  cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
+}
+.bar-reset svg {
+  width: 16px;
+  height: 16px;
+}
+.bar-reset:hover {
+  border-color: var(--accent-hi);
+  color: #fff;
+  background: rgba(232, 64, 43, 0.18);
+}
+
+/* The step indicator drops to its own full-width row under the lockup on the landing slide. */
+.stepbar {
+  flex: 1 0 100%;
+  order: 9;
+  margin-top: 2px;
+}
+
+/* ---- working state: hero collapses into a sticky bar, flush to the very top ---- */
+/* Drop the shell's top padding so the bar pins to the viewport edge with no gap above it,
+   and stretch it the full shell width (cancel the shell's side padding). */
+body[data-mode="working"] .shell {
+  padding-top: 0;
+}
+body[data-mode="working"] .hero {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  padding: 9px clamp(16px, 3vw, 40px);
+  margin: 0 calc(-1 * clamp(16px, 3vw, 40px));
+  border-radius: 0 0 14px 14px;
+  background: rgba(9, 20, 14, 0.78);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
+}
+body[data-mode="working"] .hero-bar {
+  flex-wrap: nowrap;
+  gap: clamp(10px, 1.4vw, 16px);
+}
+body[data-mode="working"] .hero-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+}
+body[data-mode="working"] .hero h1 {
+  font-size: 1.06rem;
+}
+body[data-mode="working"] .eyebrow {
+  max-height: 0;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+body[data-mode="working"] .hero-text {
+  max-height: 0;
+  opacity: 0;
+  margin: 0;
+  pointer-events: none;
+}
+body[data-mode="working"] .stepbar {
+  flex: 0 1 auto;
+  order: 0;
+  margin-top: 0;
+  margin-left: auto;
+}
+body[data-mode="working"] .bar-reset {
+  display: inline-flex;
+}
+/* Compact step indicator in the bar: dots only, no labels/hints/connector. */
+body[data-mode="working"] .steps {
+  gap: 8px;
+}
+body[data-mode="working"] .step {
+  padding: 0;
+}
+body[data-mode="working"] .step-label,
+body[data-mode="working"] .step-connector {
+  display: none;
+}
+body[data-mode="working"] .step-dot {
+  width: 30px;
+  height: 30px;
+  font-size: 0.84rem;
 }
 .subtitle {
   margin: 14px 0 0;

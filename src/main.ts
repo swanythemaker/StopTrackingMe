@@ -75,11 +75,12 @@ const rotateRight = must<HTMLButtonElement>("#rotateRight");
 const flipHBtn = must<HTMLButtonElement>("#flipH");
 const flipVBtn = must<HTMLButtonElement>("#flipV");
 
+const barReset = must<HTMLButtonElement>("#barReset");
+
 const dragOverlay = must<HTMLElement>("#dragOverlay");
 
 const flow = new StepFlow({
   carousel: must<HTMLElement>("#carousel"),
-  track: must<HTMLElement>("#track"),
   slides: [
     must<HTMLElement>("#slideUpload"),
     must<HTMLElement>("#slideProcessing"),
@@ -179,6 +180,7 @@ flipVBtn.addEventListener("click", () => {
 editBtn.addEventListener("click", () => flow.setEditing(true));
 editDone.addEventListener("click", () => flow.setEditing(false));
 newImageBtn.addEventListener("click", () => resetToUpload());
+barReset.addEventListener("click", () => resetToUpload());
 
 must<HTMLElement>("#stepUpload").addEventListener("click", () => {
   if (flow.slide > 0) flow.goTo(0, { focus: true });
